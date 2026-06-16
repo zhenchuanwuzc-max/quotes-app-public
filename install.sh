@@ -2,8 +2,8 @@
 # quotes-app install.sh (v0.1.0：git 同步版)
 #
 # 与 v0.0.1（iCloud-jsonl）的区别：
-#   - 数据 + sync.sh + json-merge.py 在 ~/quotes/（git 私有仓），不再走 iCloud _sync 中转
-#   - 代码（server.py / index.html）仍在 iCloud 工具目录（本脚本所在处）
+#   - 数据 + sync.sh + json-merge.py 在 ~/quotes-data/（git 私有数据仓），不再走 iCloud _sync 中转
+#   - 代码在 ~/quotes-app/（本脚本所在处），数据在 ~/quotes-data/，server 用 QUOTES_DATA_DIR env 连接
 #   - 新机自动 git clone 数据仓（SSH 不通则用 .gh-token 切 HTTPS）
 #   - 同步 cron 直接跑 ~/quotes/sync.sh（本地文件，无需 run_sync.sh brctl wrapper）
 #
@@ -18,7 +18,7 @@ PLIST_DST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_OUT="$HOME/Library/Logs/quotes-app.out.log"
 LOG_ERR="$HOME/Library/Logs/quotes-app.err.log"
 
-DATA_DIR="$HOME/quotes"
+DATA_DIR="$HOME/quotes-data"
 DATA_FILE="$DATA_DIR/quotes.json"
 BACKUP_DIR="$SCRIPT_DIR/_backups"
 GH_REPO="zhenchuanwuzc-max/quotes-app-data"
