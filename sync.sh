@@ -1,31 +1,31 @@
 #!/bin/bash
-# quotes-app 跨机同步（git，照抄 ~/the reference app/sync.sh 范式）
+# quotes-app 跨机同步（git，照抄 ~/daily-todo/sync.sh 范式）
 # - pull 远端最新（quotes.json 走 JSON union 合并驱动，永不产生冲突标记）
 # - 如有本地变化：commit + push
 # - 全程写 /tmp/quotes-sync.log；最终状态写 /tmp/quotes-sync.status（供 /sync-now 读）
 # 失败不阻塞 App
 #
-# 注意：本脚本运行在 ~/quotes-app/（2026-06-16 合并单仓后，代码+数据同仓根）。
+# 注意：本脚本运行在 ~/quotes/（数据 git 仓根），不是 iCloud 代码目录。
 set -e
 cd "$(dirname "$0")" || exit 0
 
 # ⚠️ py2app 把 PYTHONHOME/PYTHONPATH 指向 bundle 内嵌解释器。本脚本（JSON 校验闸）和 git 的
 # merge 合并驱动跑的是系统 python3，继承这俩变量会 "No module named encodings" 起不来 →
 # 校验非零退出被误判成「quotes.json 非法 JSON」→ 后台同步永远中止、从不 commit。
-# 清掉它们，让系统 python3 干净启动。（the reference app py2app 化后后台同步一直没成的真因）
+# 清掉它们，让系统 python3 干净启动。（daily-todo py2app 化后后台同步一直没成的真因）
 unset PYTHONHOME PYTHONPATH PYTHONEXECUTABLE
 
 PY="$(command -v python3 || echo /usr/bin/python3)"
 LOG="/tmp/quotes-sync.log"
 STATUS="/tmp/quotes-sync.status"
 TOKEN_FILE="$PWD/.gh-token"
-REPO="YOUR_GITHUB_USER/quotes-data"
+REPO="zhenchuanwuzc-max/quotes-app-data"
 log() { echo "[sync $(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG" 2>/dev/null || true; }
 log "===== start @ $(hostname -s) ====="
 
 # 自愈身份：换新机器时 git 没配 user.name/email，commit 会带自动推导的乱身份
-if [ -z "$(git config user.name)" ]; then git config user.name "Your Name"; fi
-if [ -z "$(git config user.email)" ]; then git config user.email "you@example.com"; fi
+if [ -z "$(git config user.name)" ]; then git config user.name "quotes-app"; fi
+if [ -z "$(git config user.email)" ]; then git config user.email "quotes-app@localhost"; fi
 
 # 自愈注册：确保 quotes.json 的 union 合并驱动已配置（每台设备每次 sync 幂等执行）
 if [ -f json-merge.py ]; then
@@ -38,7 +38,7 @@ if ! git remote get-url origin > /dev/null 2>&1; then
     log "no remote, skip"; echo "ok: 无远端，跳过" > "$STATUS"; exit 0
 fi
 
-# SSH→HTTPS+PAT 兜底：新机没配 SSH key 时，用 .gh-token 把 remote 改成 HTTPS（the reference app 缺这步）
+# SSH→HTTPS+PAT 兜底：新机没配 SSH key 时，用 .gh-token 把 remote 改成 HTTPS（daily-todo 缺这步）
 # 仅当 remote 是 SSH 且 ssh 探测失败 + 有 token 时改写，避免每次 sync 都动 remote
 ORIGIN_URL="$(git remote get-url origin 2>/dev/null || echo '')"
 if echo "$ORIGIN_URL" | grep -q "^git@github.com:"; then

@@ -2,7 +2,7 @@
 # quotes-app uninstall.sh — 卸载 launchd cron
 # 注意：不删数据库 ~/quotes/quotes.db 和备份目录，要删手动 rm
 set -e
-LABEL="com.example.quotes-app"
+LABEL="com.ocean.quotes-app"
 PLIST_DST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
 if [ -f "$PLIST_DST" ]; then

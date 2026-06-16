@@ -59,5 +59,5 @@ fi
 mkdir -p "$(dirname "$DB_FILE")"
 cp "$SRC" "$DB_FILE"
 echo "✅ 已恢复，记得重启 server（如果在跑）："
-echo "    launchctl unload ~/Library/LaunchAgents/com.example.quotes-app.plist"
-echo "    launchctl load ~/Library/LaunchAgents/com.example.quotes-app.plist"
+echo "    launchctl unload ~/Library/LaunchAgents/com.ocean.quotes-app.plist"
+echo "    launchctl load ~/Library/LaunchAgents/com.ocean.quotes-app.plist"

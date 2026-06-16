@@ -2,11 +2,11 @@
 """
 git merge driver —— quotes.json 的 JSON-aware union 合并
 
-改自 ~/the reference app/json-merge.py（同款范式）。关键差异：
+改自 ~/daily-todo/json-merge.py（同款范式）。关键差异：
   - tasks → quotes
   - 较新判定 _recency 用 created_at（金句正文 append-only，不可编辑）
   - 同 id 合并：done-OR-logic → **pinned 走 pinned_at LWW**（晚操作胜出，破 un-pin trap）
-  - 删除传播：完全照抄 the reference app 的 base(%O) 三方 diff，**无 tombstones**
+  - 删除传播：完全照抄 daily-todo 的 base(%O) 三方 diff，**无 tombstones**
 
 注册（每台设备本地配置，sync.sh 会自愈注册）：
     git config merge.quotes-union.driver "python3 <此脚本> %O %A %B"

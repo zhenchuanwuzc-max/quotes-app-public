@@ -25,3 +25,13 @@ __pycache__/
 *.pyc
 *.log
 .update/
+
+# data & secrets (never commit)
+quotes.json
+.gh-token
+.update/
+venv/
+build/
+dist/
+_backups/
+__pycache__/

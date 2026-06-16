@@ -538,7 +538,7 @@ $('list-scroll').addEventListener('scroll', () => {
   if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) loadMore();
 }, { passive: true });
 
-// ===== 自动更新（）=====
+// ===== 自动更新（照抄 daily-todo）=====
 function showToast(msg, duration = 1800, withBar = false) {
   const t = $('toast');
   $('toastText').textContent = msg;

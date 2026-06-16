@@ -1,13 +1,13 @@
 #!/bin/bash
-# quotes-app install.sh (v0.2.0：合并单仓版，2026-06-16)
+# quotes-app install.sh (v0.1.0：git 同步版)
 #
-# 与 v0.1.0（代码iCloud+数据独立仓）的区别：
-#   - 代码 + 数据 + sync.sh + json-merge.py 全在 ~/quotes-app/（一个 git 仓，脚本所在处）
-#   - 不再 clone/init 独立数据仓 ~/quotes（已合并，向 the reference app/another app 单仓范式看齐）
-#   - server.py 用 SCRIPT_DIR 读同目录 quotes.json（DATA_DIR = 脚本所在目录）
+# 与 v0.0.1（iCloud-jsonl）的区别：
+#   - 数据 + sync.sh + json-merge.py 在 ~/quotes/（git 私有仓），不再走 iCloud _sync 中转
+#   - 代码（server.py / index.html）仍在 iCloud 工具目录（本脚本所在处）
+#   - 新机自动 git clone 数据仓（SSH 不通则用 .gh-token 切 HTTPS）
+#   - 同步 cron 直接跑 ~/quotes/sync.sh（本地文件，无需 run_sync.sh brctl wrapper）
 #
-# 设计：代码+数据同仓（2026-06-16 plan-reviewer v3 共识；拆两仓被双 kill_switch 否过）。
-# 装机：git clone quotes-app 时数据已一起来，本脚本只配 venv + launchd，不另 clone 数据。
+# 设计：代码与数据拆两仓（plan-reviewer 三盲共识）。本脚本是代码侧的 bootstrap。
 
 set -e
 
@@ -18,15 +18,17 @@ PLIST_DST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_OUT="$HOME/Library/Logs/quotes-app.out.log"
 LOG_ERR="$HOME/Library/Logs/quotes-app.err.log"
 
-# 单仓：数据与代码同目录（SCRIPT_DIR = ~/quotes-app），不再有独立数据仓
-DATA_DIR="$SCRIPT_DIR"
+DATA_DIR="$HOME/quotes"
 DATA_FILE="$DATA_DIR/quotes.json"
 BACKUP_DIR="$SCRIPT_DIR/_backups"
+GH_REPO="zhenchuanwuzc-max/quotes-app-data"
+GH_TOKEN_FILE="$DATA_DIR/.gh-token"
 
 echo "════════════════════════════════════════════"
-echo "  quotes-app installer (v0.2.0 单仓)"
+echo "  quotes-app installer (v0.1.0 git-sync)"
 echo "════════════════════════════════════════════"
-echo "  仓目录（代码+数据）: $SCRIPT_DIR"
+echo "  代码目录: $SCRIPT_DIR"
+echo "  数据仓:   $DATA_DIR (git: $GH_REPO)"
 echo ""
 
 # ─────────────────────────────────────────────
@@ -47,30 +49,71 @@ fi
 echo "✅ 端口选定：$PORT"
 
 # ─────────────────────────────────────────────
-# 2. 单仓：代码+数据已在 SCRIPT_DIR（git clone quotes-app 时一起来的）
-#    无需独立 clone 数据仓。仅 pull 最新 + venv。
+# 2. 数据仓 bootstrap：~/quotes/ 是 git 仓吗？
+#    - 已是 git 仓 → pull 最新
+#    - 不是但有数据 → git init + 关联远端（首台机/迁移）
+#    - 啥都没有 → git clone（新机）
 # ─────────────────────────────────────────────
-cd "$SCRIPT_DIR"
-if [ -d "$SCRIPT_DIR/.git" ]; then
-    echo "✅ quotes-app 单仓 → pull 最新"
-    git pull --rebase --autostash origin main 2>/dev/null || echo "  (pull 失败，保留本地，sync 会重试)"
+mkdir -p "$DATA_DIR"
+# 拷一份 token 进数据仓（HTTPS fallback 用；.gitignore 已排除，不会进 git）
+if [ ! -f "$GH_TOKEN_FILE" ] && [ -f "$HOME/daily-todo/.gh-token" ]; then
+    cp "$HOME/daily-todo/.gh-token" "$GH_TOKEN_FILE" 2>/dev/null || true
 fi
 
-# venv + 依赖（pywebview/py2app 桌面 App 用；server 本身用系统 python3）
-if [ ! -d "$SCRIPT_DIR/venv" ]; then
-    echo "📦 建 venv + 装依赖（pywebview/py2app）"
-    python3 -m venv venv
-    ./venv/bin/pip install -q --upgrade pip 2>/dev/null || true
-    ./venv/bin/pip install -q pywebview pyobjc-core pyobjc-framework-Cocoa pyobjc-framework-WebKit py2app 2>/dev/null || true
+git_remote_url() {
+    # 优先 SSH；探测失败且有 token 则 HTTPS+PAT
+    if ssh -T -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes git@github.com 2>&1 | grep -q "successfully authenticated"; then
+        echo "git@github.com:${GH_REPO}.git"
+    elif [ -f "$GH_TOKEN_FILE" ]; then
+        echo "https://$(tr -d '[:space:]' < "$GH_TOKEN_FILE")@github.com/${GH_REPO}.git"
+    else
+        echo "git@github.com:${GH_REPO}.git"   # 没 token 也给 SSH，让 git 自己报错
+    fi
+}
+
+cd "$DATA_DIR"
+if [ -d "$DATA_DIR/.git" ]; then
+    echo "✅ ~/quotes 已是 git 仓 → pull 最新"
+    git pull --rebase --autostash origin main 2>/dev/null || echo "  (pull 失败，保留本地，sync 会重试)"
+elif [ -f "$DATA_FILE" ]; then
+    echo "🆕 ~/quotes 有数据但非 git 仓 → git init + 关联远端（首台机/迁移）"
+    git init -q
+    git branch -M main 2>/dev/null || true
+    git remote add origin "$(git_remote_url)" 2>/dev/null || git remote set-url origin "$(git_remote_url)"
+    echo "  remote: $(git remote get-url origin | sed 's/:[^@]*@/:***@/')"
+else
+    echo "📥 ~/quotes 空 → git clone 数据仓（新机）"
+    cd "$HOME"
+    if git clone "$(git_remote_url)" "$DATA_DIR" 2>/dev/null; then
+        echo "✅ clone 成功"
+    else
+        echo "⚠️  clone 失败（仓可能还没建 / 没权限）→ 先 git init 本地，等首推"
+        mkdir -p "$DATA_DIR"; cd "$DATA_DIR"; git init -q; git branch -M main 2>/dev/null || true
+        git remote add origin "$(git_remote_url)" 2>/dev/null || true
+    fi
+    cd "$DATA_DIR"
+fi
+
+# ─────────────────────────────────────────────
+# 3. 同步脚本就位：把 sync.sh / json-merge.py / .gitattributes 拷进数据仓
+#    （首台机从 iCloud 代码目录拷；新机 clone 已带，覆盖确保最新）
+# ─────────────────────────────────────────────
+for f in sync.sh json-merge.py; do
+    if [ -f "$SCRIPT_DIR/$f" ]; then
+        cp "$SCRIPT_DIR/$f" "$DATA_DIR/$f"
+        chmod +x "$DATA_DIR/$f"
+    fi
+done
+if [ ! -f "$DATA_DIR/.gitattributes" ]; then
+    echo "quotes.json merge=quotes-union" > "$DATA_DIR/.gitattributes"
 fi
 
 # 自愈 git config + 注册 merge 驱动（sync.sh 每次也会做，这里先做一遍保证首推干净）
-if [ -z "$(git config user.name)" ]; then git config user.name "Your Name"; fi
-if [ -z "$(git config user.email)" ]; then git config user.email "you@example.com"; fi
+if [ -z "$(git config user.name)" ]; then git config user.name "quotes-app"; fi
+if [ -z "$(git config user.email)" ]; then git config user.email "quotes-app@localhost"; fi
 PY="$(command -v python3 || echo /usr/bin/python3)"
-git config merge.quotes-union.driver "$PY '$SCRIPT_DIR/json-merge.py' %O %A %B" 2>/dev/null || true
+git config merge.quotes-union.driver "$PY '$DATA_DIR/json-merge.py' %O %A %B" 2>/dev/null || true
 git config merge.quotes-union.name "quotes.json JSON-aware union merge" 2>/dev/null || true
-chmod +x "$SCRIPT_DIR/sync.sh" "$SCRIPT_DIR/json-merge.py" 2>/dev/null || true
 
 # ─────────────────────────────────────────────
 # 4. server launchd plist（替换占位符）
@@ -96,7 +139,7 @@ launchctl load "$PLIST_DST"
 echo "✅ server launchd loaded"
 
 # ─────────────────────────────────────────────
-# 5. 同步 cron（每 10 分钟跑 ~/quotes-app/sync.sh，本地文件无需 brctl wrapper）
+# 5. 同步 cron（每 10 分钟跑 ~/quotes/sync.sh，本地文件无需 brctl wrapper）
 # ─────────────────────────────────────────────
 SYNC_LABEL="com.example.quotes-sync"
 SYNC_PLIST_SRC="$SCRIPT_DIR/com.example.quotes-sync.plist"

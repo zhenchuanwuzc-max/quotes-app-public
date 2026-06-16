@@ -1,9 +1,9 @@
 """
 py2app 打包脚本
 用法：
-    cd /path/to/quotes-app
-    python3 setup.py py2app -A   # alias 模式（开发，快）
-    python3 setup.py py2app      # 完整打包（产 dist/quotes.app）
+    cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Ocean同步使用/Ocean/工具/quotes-app
+    ~/daily-todo/venv/bin/python setup.py py2app -A   # alias 模式（开发，快）
+    ~/daily-todo/venv/bin/python setup.py py2app      # 完整打包（产 dist/quotes.app）
 产物：dist/quotes.app
 """
 import os
