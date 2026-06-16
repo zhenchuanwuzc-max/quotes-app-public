@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>quotes · 金句库</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+    margin: 0; padding: 0;
+    background: #fdfcf7;     /* 奶油暖白底 */
+    color: #2a2a2a; line-height: 1.6;
+    /* 工具型布局：顶部固定 + 列表独立滚动，整页不滚 */
+    display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+  }
+  .topbar {
+    flex-shrink: 0; width: 100%;
+    border-bottom: 1px solid #efe9d8; background: #fdfcf7;
+  }
+  .topbar-inner { max-width: 760px; margin: 0 auto; padding: 14px 20px 10px; }
+  .list-scroll { flex: 1; overflow-y: auto; width: 100%; }
+  .list-inner { max-width: 760px; margin: 0 auto; padding: 12px 20px 40px; }
+
+  /* 标题行：标题 + 条数 + ＋新金句 pill + 同步状态 —— 一行搞定，省垂直空间 */
+  .header-row { display: flex; align-items: center; gap: 10px; }
+  h1 {
+    font-size: 19px; margin: 0; font-weight: 600;
+    font-family: Georgia, "Times New Roman", "PingFang SC", serif;
+    color: #1f6feb;
+  }
+  .sub { color: #999; font-size: 12px; }
+  .spacer { flex: 1; }
+  .add-pill {
+    font-size: 13px; padding: 5px 14px; border-radius: 16px;
+    background: #28a745; color: #fff; border: none; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+  }
+  .add-pill:hover { background: #218838; }
+  .sync-btn {
+    font-size: 12px; padding: 5px 10px; border-radius: 14px;
+    background: #fffefb; color: #888; border: 1px solid #e5dfd0; cursor: pointer;
+    white-space: nowrap;
+  }
+  .sync-btn:hover { border-color: #1f6feb; color: #1f6feb; }
+
+  /* 搜索 */
+  .search-box { margin: 12px 0 8px; display: flex; gap: 8px; }
+  .search-box input {
+    flex: 1; padding: 9px 14px; font-size: 15px;
+    border: 1px solid #e5dfd0; border-radius: 8px; background: #fffefb;
+  }
+  .search-box input:focus {
+    outline: none; border-color: #1f6feb;
+    box-shadow: 0 0 0 3px rgba(31,111,235,0.15);
+  }
+
+  /* 筛选 chip 行（按 use_case 动态生成）*/
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+  .chip {
+    font-size: 12px; padding: 3px 11px; border-radius: 13px;
+    background: #fffefb; color: #777; border: 1px solid #e5dfd0; cursor: pointer;
+    user-select: none;
+  }
+  .chip:hover { border-color: #1f6feb; color: #1f6feb; }
+  .chip.active { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+
+  /* 新金句弹层（默认隐藏；点 ＋ 才展开，平时完全不占列表空间）*/
+  .add-pop {
+    background: #fffefb; border: 1px solid #efe9d8; border-radius: 10px;
+    padding: 12px 14px; margin: 8px 0 4px; display: none;
+  }
+  .add-pop.open { display: block; }
+  .add-pop textarea {
+    width: 100%; min-height: 64px; padding: 9px 12px; font-size: 15px;
+    border: 1px solid #e5dfd0; border-radius: 6px; resize: vertical;
+    font-family: inherit; line-height: 1.5; background: #fff;
+  }
+  .add-pop textarea:focus, .add-pop input:focus { outline: none; border-color: #1f6feb; }
+  .add-pop .source-input {
+    width: 100%; box-sizing: border-box; margin-top: 8px;
+    padding: 8px 12px; font-size: 14px;
+    border: 1px solid #e5dfd0; border-radius: 6px; background: #fff;
+  }
+  .add-pop .uc-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .add-pop .uc-picker .uc-tag {
+    font-size: 12px; padding: 3px 11px; border-radius: 13px;
+    background: #fffefb; color: #777; border: 1px solid #e5dfd0; cursor: pointer;
+    user-select: none; transition: all 0.12s;
+  }
+  .add-pop .uc-picker .uc-tag:hover { border-color: #1f6feb; color: #1f6feb; }
+  .add-pop .uc-picker .uc-tag.sel { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+  .add-pop .actions { margin-top: 10px; display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
+  .add-pop .hint { font-size: 11px; color: #bbb; }
+  .add-pop button.save {
+    padding: 8px 22px; font-size: 14px;
+    background: #28a745; color: #fff; border: none; border-radius: 6px; cursor: pointer;
+  }
+  .add-pop button.save:hover { background: #218838; }
+
+  .list-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 10px; padding: 0 4px;
+  }
+  .list-header h2 { font-size: 13px; margin: 0; color: #888; font-weight: 500; }
+  .total { color: #999; font-size: 12px; }
+
+  .quote {
+    background: #fffefb; border: 1px solid #efe9d8; border-radius: 8px;
+    padding: 11px 16px; margin-bottom: 7px;
+    position: relative;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .quote:hover { border-color: #d8d0bb; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+  /* 置顶高亮：左侧金色条 + 淡底 */
+  .quote.pinned { background: #fffdf2; border-color: #e8d9a8; }
+  .quote.pinned::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: #e0b341; border-radius: 8px 0 0 8px;
+  }
+  .quote .text {
+    font-size: 15px; line-height: 1.6; margin-bottom: 8px;
+    white-space: pre-wrap; word-break: break-word; color: #1f1f1f;
+    padding-right: 36px;  /* 只给常显的 ☆ 让位；复制/× hover 时浮层覆盖，不占正文宽度 */
+  }
+  .quote .meta {
+    font-size: 12px; color: #999;
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  }
+  .quote .meta .src { color: #777; }
+  .quote .meta .uc {
+    background: #f0f7ff; color: #1f6feb;
+    padding: 1px 8px; border-radius: 3px; font-size: 11px; cursor: pointer;
+  }
+  .quote .meta .uc:hover { background: #dcebff; }
+  /* 右上角动作区：收藏☆ 常显占位；复制/× hover 时浮层覆盖（带奶油白底挡住底下文字），不挤压正文 */
+  .quote .actions {
+    position: absolute; top: 6px; right: 8px;
+    display: flex; align-items: center; gap: 2px;
+  }
+  .quote .actions button {
+    background: transparent; border: none; cursor: pointer;
+    font-size: 13px; padding: 3px 6px; border-radius: 4px; color: #999;
+  }
+  .quote .actions button:hover { background: #f0ece0; }
+  .quote .actions .copy:hover { color: #1f6feb; }
+  .quote .actions .del:hover { color: #c00; }
+  /* 复制/删除：默认完全不占位（absolute 抽离 + 隐藏）；hover 时浮出，停在 ☆ 左侧，带半透明奶油白底盖住文字 */
+  .quote .actions .copy, .quote .actions .del {
+    position: absolute; top: 0; opacity: 0; pointer-events: none;
+    transition: opacity 0.12s; background: rgba(255,254,251,0.95);
+    box-shadow: -6px 0 6px rgba(255,254,251,0.95);
+  }
+  .quote .actions .del { right: 30px; }   /* ☆ 宽约 30px，× 紧贴其左 */
+  .quote .actions .copy { right: 56px; }  /* 复制 在 × 左侧 */
+  .quote:hover .actions .copy, .quote:hover .actions .del { opacity: 1; pointer-events: auto; }
+  /* 收藏星：常显（置顶/未置顶不同色），永远在最右，点击切换 */
+  .quote .actions .star {
+    font-size: 15px; padding: 2px 5px; line-height: 1;
+    color: #d8d0bb;
+  }
+  .quote .actions .star.on { color: #e0b341; }
+  .quote .actions .star:hover { color: #e0b341; }
+
+  .empty { color: #aaa; text-align: center; padding: 40px 0; font-size: 14px; }
+  .loading { text-align: center; padding: 20px; color: #aaa; font-size: 12px; }
+  .end { text-align: center; padding: 20px; color: #ccc; font-size: 11px; }
+  .toast {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    background: #333; color: #fff; padding: 10px 22px;
+    border-radius: 6px; font-size: 13px;
+    opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 100;
+  }
+  .toast.show { opacity: 0.92; }
+  .toast-bar-wrap { height: 3px; background: rgba(255,255,255,0.2); border-radius: 2px; margin-top: 6px; display: none; }
+  .toast-bar-wrap.show { display: block; }
+  .toast-bar { height: 100%; width: 0; background: #4caf50; border-radius: 2px; transition: width 0.2s; }
+
+  /* 更新横幅 */
+  .update-banner {
+    position: fixed; top: -60px; left: 50%; transform: translateX(-50%);
+    background: #1f2937; color: #fff; padding: 9px 16px; border-radius: 0 0 10px 10px;
+    display: flex; align-items: center; gap: 10px; font-size: 13px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18); z-index: 200; transition: top 0.25s;
+  }
+  .update-banner.show { top: 0; }
+  .update-banner .ub-text { white-space: nowrap; }
+  .update-banner .ub-btn { font-size: 12px; padding: 4px 12px; border-radius: 6px; border: none; cursor: pointer; }
+  .update-banner .ub-now { background: #28a745; color: #fff; }
+  .update-banner .ub-now:hover { background: #218838; }
+  .update-banner .ub-view { background: transparent; color: #9cd; border: 1px solid #456; }
+  .update-banner .ub-dismiss { background: transparent; color: #889; }
+  ::selection { background: rgba(31,111,235,0.2); }
+  .newbar {
+    margin: 0 0 12px; padding: 9px 14px; border-radius: 10px; cursor: pointer;
+    background: rgba(31,111,235,0.08); border: 1px solid rgba(31,111,235,0.25);
+    color: #1f6feb; font-size: 13px; font-weight: 500; text-align: center;
+    transition: background 0.15s; user-select: none;
+  }
+  .newbar:hover { background: rgba(31,111,235,0.14); }
+</style>
+</head>
+<body>
+
+<div class="topbar"><div class="topbar-inner">
+  <div class="header-row">
+    <h1>Q · 金句库</h1>
+    <span class="sub">· <span class="total" id="total">- 条</span></span>
+    <span class="spacer"></span>
+    <button class="sync-btn" id="sync-btn" onclick="syncNow()" title="手动同步到 GitHub">⟳ 同步</button>
+    <button class="add-pill" onclick="toggleAdd()"><span>＋</span> 新金句</button>
+  </div>
+
+  <!-- 新金句弹层（默认隐藏）-->
+  <div class="add-pop" id="add-pop">
+    <textarea id="text" placeholder="金句正文…"></textarea>
+    <input class="source-input" id="source" type="text" placeholder="来源（书名 / 人名 / 场景，可选）" />
+    <div class="uc-picker" id="uc-picker"><!-- 五个标签点选，JS 渲染 --></div>
+    <div class="actions">
+      <span class="hint">⌘ + ↵ 快捷添加 · 标签可不选</span>
+      <button class="save" onclick="addQuote()">添加</button>
+    </div>
+  </div>
+
+  <div class="search-box">
+    <input id="search" type="text" placeholder="搜金句正文 / 来源 / 用途…（直接打字）" autofocus />
+  </div>
+
+  <!-- 用途筛选 chips（动态）-->
+  <div class="chips" id="chips"></div>
+</div></div><!-- /topbar -->
+
+<div class="list-scroll" id="list-scroll"><div class="list-inner">
+  <!-- 新金句提示条（轮询发现 total 变化且用户不在顶部时显示，点击滚回顶部刷新）-->
+  <div id="newbar" class="newbar" style="display:none" onclick="applyNewQuotes()"></div>
+  <div class="list-header">
+    <h2 id="list-title">最近添加</h2>
+    <span id="list-count" class="total"></span>
+  </div>
+  <div id="list"></div>
+  <div id="loading" class="loading" style="display:none">加载中…</div>
+  <div id="end" class="end" style="display:none">— 到底了 —</div>
+</div></div><!-- /list-scroll -->
+
+<div class="toast" id="toast"><span id="toastText"></span><div class="toast-bar-wrap" id="toastBarWrap"><div class="toast-bar" id="toastBar"></div></div></div>
+
+<!-- 更新横幅（发现新版本时滑出）-->
+<div class="update-banner" id="updateBanner">
+  <span class="ub-text">🆕 发现新版本 <b id="updateVer"></b></span>
+  <button class="ub-btn ub-now" id="updateNow">立即更新</button>
+  <button class="ub-btn ub-view" id="updateView">看详情</button>
+  <button class="ub-btn ub-dismiss" id="updateDismiss">忽略</button>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const PAGE_SIZE = 30;
+
+// 固定五个标签（写死，不再按库存动态生成）；"未分类" = 空 use_case 的兜底视图
+const USE_CASES = ['日常工作', '学习', '读书', '汇报', '公司做事情'];
+const UNTAGGED = '未分类';  // 伪 chip，筛 use_case 为空的历史/未打标金句
+
+const state = {
+  query: '',        // 搜索框文字
+  chip: '',         // 选中的 use_case chip（空 = 全部）
+  newUseCase: '',   // 新增框当前选中的标签（空 = 未选）
+  offset: 0, total: 0, loaded: 0, loading: false, done: false,
+};
+
+// toast 统一走 showToast（定义在文件末尾的更新区），保证 #toastText 结构不被覆盖
+function toast(msg) { showToast(msg, 1800, false); }
+
+// 实际查询词 = chip 优先（chip 选中时用 chip），否则用搜索框
+function effectiveQuery() {
+  return state.chip || state.query;
+}
+
+async function fetchQuotes(q, offset, limit) {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  params.set('offset', offset);
+  params.set('limit', limit);
+  const resp = await fetch(`/quotes?${params.toString()}`);
+  return await resp.json();
+}
+
+function fmtDate(iso) { try { return iso.slice(0, 10); } catch { return iso; } }
+
+function escapeHtml(s) {
+  return (s || '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function renderQuote(q) {
+  const pinned = !!q.pinned;
+  return `
+    <div class="quote ${pinned ? 'pinned' : ''}" data-id="${q.id}">
+      <div class="text">${escapeHtml(q.text)}</div>
+      <div class="meta">
+        ${q.source ? `<span class="src">— ${escapeHtml(q.source)}</span>` : ''}
+        ${q.use_case ? `<span class="uc" onclick="filterByChip('${escapeHtml(q.use_case)}')">${escapeHtml(q.use_case)}</span>` : ''}
+        <span>${fmtDate(q.created_at)}</span>
+      </div>
+      <div class="actions">
+        <button class="star ${pinned ? 'on' : ''}" onclick="togglePin('${q.id}', ${pinned})" title="${pinned ? '取消置顶' : '置顶'}">${pinned ? '★' : '☆'}</button>
+        <button class="copy" onclick="copyQuote('${q.id}')" title="复制正文">复制</button>
+        <button class="del" onclick="delQuote('${q.id}')" title="删除">×</button>
+      </div>
+    </div>
+  `;
+}
+
+function updateHeader() {
+  $('total').textContent = `${state.total} 条`;
+  const eq = effectiveQuery();
+  $('list-title').textContent = eq ? `筛选「${eq}」` : '最近添加';
+  $('list-count').textContent = `已显示 ${state.loaded} / ${state.total} 条`;
+}
+
+// 缓存当前正文，供复制（避免 DOM 转义往返）
+const _textCache = {};
+
+async function loadFirstPage() {
+  state.offset = 0; state.loaded = 0; state.done = false;
+  $('end').style.display = 'none';
+  // "未分类"是前端伪筛选：server 不认，拉全量本地筛 use_case 为空
+  if (state.chip === UNTAGGED) return loadUntagged();
+  const eq = effectiveQuery();
+  try {
+    const data = await fetchQuotes(eq, 0, PAGE_SIZE);
+    state.total = data.total;
+    state.loaded = data.quotes.length;
+    state.offset = data.quotes.length;
+    data.quotes.forEach(q => _textCache[q.id] = q.text);
+
+    const list = $('list');
+    if (!data.quotes.length) {
+      list.innerHTML = '<div class="empty">' +
+        (eq ? `没搜到「${eq}」相关` : '还没存过金句，点右上「＋ 新金句」开始') + '</div>';
+      state.done = true;
+    } else {
+      list.innerHTML = data.quotes.map(renderQuote).join('');
+      if (data.quotes.length < PAGE_SIZE) { state.done = true; $('end').style.display = 'block'; }
+    }
+    updateHeader();
+  } catch (e) { toast('加载失败：' + e.message); }
+}
+
+// 未分类视图：拉全量、本地筛空 use_case，一次性渲染（库小无分页压力）
+async function loadUntagged() {
+  try {
+    const data = await fetchQuotes('', 0, 9999);
+    const empties = data.quotes.filter(q => !(q.use_case || '').trim());
+    empties.forEach(q => _textCache[q.id] = q.text);
+    state.total = data.total;
+    state.loaded = empties.length;
+    state.done = true;  // 全量已拉，无更多
+    const list = $('list');
+    list.innerHTML = empties.length
+      ? empties.map(renderQuote).join('')
+      : '<div class="empty">没有未分类的金句</div>';
+    $('list-title').textContent = `筛选「${UNTAGGED}」`;
+    $('list-count').textContent = `已显示 ${empties.length} 条未分类`;
+    $('total').textContent = `${state.total} 条`;
+  } catch (e) { toast('加载失败：' + e.message); }
+}
+
+async function loadMore() {
+  if (state.loading || state.done) return;
+  state.loading = true;
+  $('loading').style.display = 'block';
+  try {
+    const data = await fetchQuotes(effectiveQuery(), state.offset, PAGE_SIZE);
+    if (!data.quotes.length) { state.done = true; $('end').style.display = 'block'; }
+    else {
+      data.quotes.forEach(q => _textCache[q.id] = q.text);
+      $('list').insertAdjacentHTML('beforeend', data.quotes.map(renderQuote).join(''));
+      state.offset += data.quotes.length;
+      state.loaded += data.quotes.length;
+      if (data.quotes.length < PAGE_SIZE) { state.done = true; $('end').style.display = 'block'; }
+      updateHeader();
+    }
+  } catch (e) { toast('加载失败：' + e.message); }
+  finally { state.loading = false; $('loading').style.display = 'none'; }
+}
+
+// ===== chip 筛选（写死五个固定标签 + 未分类兜底）=====
+async function buildChips() {
+  // 拉全量只为算各标签 count（库小，一次拉够）；标签集合写死不随库变
+  try {
+    const data = await fetchQuotes('', 0, 9999);
+    const counts = {};
+    let untagged = 0;
+    data.quotes.forEach(q => {
+      const uc = (q.use_case || '').trim();
+      if (uc) counts[uc] = (counts[uc] || 0) + 1;
+      else untagged++;
+    });
+    const box = $('chips');
+    let html = `<span class="chip ${state.chip === '' ? 'active' : ''}" onclick="filterByChip('')">全部</span>`;
+    // 五个固定标签，恒显示（count 为 0 也显示，保持入口稳定）
+    html += USE_CASES.map(uc =>
+      `<span class="chip ${state.chip === uc ? 'active' : ''}" onclick="filterByChip('${escapeHtml(uc)}')">${escapeHtml(uc)} ${counts[uc] || 0}</span>`
+    ).join('');
+    // 未分类兜底：只在确有空标签金句时显示（历史 3 条空串走这里，不进冷宫）
+    if (untagged > 0) {
+      html += `<span class="chip ${state.chip === UNTAGGED ? 'active' : ''}" onclick="filterByChip('${UNTAGGED}')" style="color:#b08;border-color:#e5cce0">${UNTAGGED} ${untagged}</span>`;
+    }
+    box.innerHTML = html;
+  } catch (e) { /* chip 失败不阻断主列表 */ }
+}
+
+function filterByChip(uc) {
+  state.chip = uc;
+  if (uc) $('search').value = '';   // 选 chip 时清搜索框，语义不打架
+  state.query = '';
+  buildChips();      // 重渲染高亮
+  loadFirstPage();
+}
+
+// ===== 复制 =====
+async function copyQuote(id) {
+  const text = _textCache[id] || '';
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('已复制');
+  } catch (e) {
+    // 兜底：clipboard API 不可用时用旧法
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast('已复制'); }
+    catch { toast('复制失败'); }
+    document.body.removeChild(ta);
+  }
+}
+
+// ===== 置顶 =====
+async function togglePin(id, currentlyPinned) {
+  try {
+    const resp = await fetch(`/quotes/${id}/pin`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pinned: !currentlyPinned }),
+    });
+    const data = await resp.json();
+    if (data.ok) { toast(currentlyPinned ? '已取消置顶' : '已置顶'); loadFirstPage(); }
+    else toast('操作失败：' + (data.error || '未知'));
+  } catch (e) { toast('网络错误：' + e.message); }
+}
+
+// ===== 添加 =====
+// 渲染新增框的五个标签点选（单选，可全不选）
+function renderUcPicker() {
+  $('uc-picker').innerHTML = USE_CASES.map(uc =>
+    `<span class="uc-tag ${state.newUseCase === uc ? 'sel' : ''}" onclick="pickUseCase('${uc}')">${uc}</span>`
+  ).join('');
+}
+function pickUseCase(uc) {
+  // 再点一次已选中的 = 取消选择（回到无标签）
+  state.newUseCase = (state.newUseCase === uc) ? '' : uc;
+  renderUcPicker();
+}
+function toggleAdd() {
+  const pop = $('add-pop');
+  pop.classList.toggle('open');
+  if (pop.classList.contains('open')) { renderUcPicker(); $('text').focus(); }
+}
+
+async function addQuote() {
+  const text = $('text').value.trim();
+  if (!text) { toast('金句正文不能空'); $('text').focus(); return; }
+  const source = $('source').value.trim();
+  const use_case = state.newUseCase;   // 选中的标签（可空）
+  try {
+    const resp = await fetch('/quotes/add', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, source, use_case }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      $('text').value = ''; $('source').value = ''; state.newUseCase = '';
+      toast(`已存入 #${data.total}`);
+      $('search').value = ''; state.query = ''; state.chip = '';
+      $('add-pop').classList.remove('open');   // 加完收起，列表最大化
+      buildChips();
+      loadFirstPage();
+    } else toast('添加失败：' + (data.error || '未知'));
+  } catch (e) { toast('网络错误：' + e.message); }
+}
+
+// ===== 删除 =====
+async function delQuote(id) {
+  if (!confirm('删了不可恢复（除非从备份/git 恢复），确认？')) return;
+  try {
+    const resp = await fetch(`/quotes/${id}`, { method: 'DELETE' });
+    const data = await resp.json();
+    if (data.ok) { toast('已删'); buildChips(); loadFirstPage(); }
+    else toast('删除失败：' + (data.error || '未知'));
+  } catch (e) { toast('网络错误：' + e.message); }
+}
+
+// ===== 手动同步 =====
+async function syncNow() {
+  const btn = $('sync-btn');
+  btn.textContent = '⟳ 同步中…'; btn.disabled = true;
+  try {
+    const resp = await fetch('/sync-now', { method: 'POST' });
+    const data = await resp.json();
+    toast(data.status || (data.ok ? '已同步' : '同步失败'));
+    if (data.ok) { buildChips(); loadFirstPage(); }  // 同步可能拉来新条目
+  } catch (e) { toast('同步出错：' + e.message); }
+  finally { btn.textContent = '⟳ 同步'; btn.disabled = false; }
+}
+
+// ===== 搜索框 =====
+function doSearch() {
+  state.query = $('search').value.trim();
+  if (state.query) state.chip = '';   // 打字搜索时取消 chip
+  buildChips();
+  loadFirstPage();
+}
+let searchTimer = null;
+$('search').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(doSearch, 200);
+});
+$('search').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { clearTimeout(searchTimer); doSearch(); }
+});
+$('text').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addQuote();
+});
+
+// 列表到底自动加载
+$('list-scroll').addEventListener('scroll', () => {
+  const el = $('list-scroll');
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) loadMore();
+}, { passive: true });
+
+// ===== 自动更新（）=====
+function showToast(msg, duration = 1800, withBar = false) {
+  const t = $('toast');
+  $('toastText').textContent = msg;
+  $('toastBarWrap').classList.toggle('show', withBar);
+  t.classList.add('show');
+  if (duration > 0) setTimeout(() => t.classList.remove('show'), duration);
+}
+function setToastProgress(pct) {
+  $('toastBar').style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+function cmpVer(a, b) {
+  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+async function checkUpdate(verbose = false) {
+  if (verbose) showToast('⏳ 检查中…', 8000);
+  let data;
+  try {
+    const r = await fetch('/check-update', { cache: 'no-store' });
+    data = await r.json();
+  } catch (e) { if (verbose) showToast('❌ 检查失败：server 无响应'); return; }
+  if (data.error) {
+    if (verbose) showToast(`❌ ${String(data.error).slice(0, 60)} ${data.has_token ? '' : '（未配 .gh-token）'}`);
+    return;
+  }
+  const me = data.current, latest = data.latest;
+  if (!latest) { if (verbose) showToast('❌ 远端 release 不存在'); return; }
+  if (cmpVer(latest, me) > 0) {
+    if (verbose) localStorage.removeItem('dismissedVer');
+    if (localStorage.getItem('dismissedVer') !== latest) {
+      const banner = $('updateBanner');
+      $('updateVer').textContent = 'v' + latest;
+      banner.classList.add('show');
+      banner.dataset.url = data.html_url || '';
+      banner.dataset.ver = latest;
+    }
+    if (verbose) showToast(`🆕 发现新版本 v${latest}`);
+  } else {
+    if (verbose) showToast(`✅ 已是最新 v${me}`);
+  }
+}
+
+async function pollUpdateProgress() {
+  while (true) {
+    let p;
+    try {
+      const r = await fetch('/update-progress', { cache: 'no-store' });
+      p = await r.json();
+    } catch (e) {
+      showToast('✅ App 即将重启…', 6000, false); setToastProgress(100); return;
+    }
+    if (p.status === 'error') { showToast('❌ 更新失败：' + String(p.error || '').slice(0, 80), 6000, false); return; }
+    if (p.status === 'downloading') {
+      const pct = p.total > 0 ? Math.floor(p.downloaded / p.total * 100) : 0;
+      showToast(`⬇ 下载中 ${pct}%`, 0, true); setToastProgress(pct);
+    } else if (p.status === 'downloaded' || p.status === 'installing') {
+      showToast('⚙️ 安装中…', 0, true); setToastProgress(100);
+    } else if (p.status === 'restarting') {
+      showToast('✅ App 即将重启…', 6000, false); setToastProgress(100); return;
+    }
+    await new Promise(r => setTimeout(r, 400));
+  }
+}
+
+$('updateNow').addEventListener('click', async () => {
+  if (!confirm('立即下载新版本并替换 App 吗？\n替换过程 App 会自动重启。')) return;
+  showToast('⏳ 准备下载…', 0, true); setToastProgress(0);
+  try {
+    const r = await fetch('/install-update', { method: 'POST' });
+    const d = await r.json();
+    if (d.error) { showToast('❌ 触发失败：' + String(d.error).slice(0, 80), 6000, false); return; }
+    pollUpdateProgress();
+  } catch (e) { showToast('❌ 网络错误', 4000, false); }
+});
+$('updateView').addEventListener('click', () => {
+  const url = $('updateBanner').dataset.url;
+  if (url) window.open(url, '_blank');
+});
+$('updateDismiss').addEventListener('click', () => {
+  const ver = $('updateBanner').dataset.ver;
+  if (ver) localStorage.setItem('dismissedVer', ver);
+  $('updateBanner').classList.remove('show');
+});
+// 检查更新入口在 macOS 菜单栏「quotes」→「检查更新…」（PyObjC 调 checkUpdate(true)）
+// 启动后 2 秒静默检查 + 之后每小时检查
+setTimeout(() => checkUpdate(false), 2000);
+setInterval(() => checkUpdate(false), 60 * 60 * 1000);
+
+// ===== 自动刷新：每 7 秒静默比对 total，变了就刷新 =====
+// 覆盖：skill/API 外部写入、另一台机 git sync 拉来新条目
+// 7 秒（非 5 秒）是为了与 server 端 5 秒 git-sync debounce 错峰，避免同拍抖动
+let _pendingNewTotal = null;  // 待应用的新 total（用户翻页中时挂起）
+function applyNewQuotes() {
+  $('newbar').style.display = 'none';
+  _pendingNewTotal = null;
+  $('list-scroll').scrollTop = 0;  // 滚回顶部
+  buildChips();
+  loadFirstPage();
+}
+async function pollForChanges() {
+  // 用户正在输入搜索框 / 新增框时跳过，避免打断
+  if (document.activeElement === $('search') || document.activeElement === $('text')
+      || document.activeElement === $('source') || document.activeElement === $('use_case')) return;
+  if (state.loading) return;
+  // 有筛选/搜索时不自动刷（避免打断筛选视图），等用户清空筛选后再说
+  if (effectiveQuery()) return;
+  try {
+    const r = await fetch('/health', { cache: 'no-store' });
+    const d = await r.json();  // /health 返回 {ok, total}
+    if (typeof d.total !== 'number' || d.total === state.total) return;
+    // total 变了：在顶部附近就直接静默刷；否则弹提示条不踹用户
+    const atTop = $('list-scroll').scrollTop < 60;
+    if (atTop) {
+      applyNewQuotes();
+    } else {
+      _pendingNewTotal = d.total;
+      const diff = d.total - state.total;
+      const bar = $('newbar');
+      bar.textContent = diff > 0 ? `↑ ${diff} 条新金句，点击查看` : '↑ 金句库有更新，点击刷新';
+      bar.style.display = 'block';
+    }
+  } catch (e) { /* 探测失败静默跳过，不打断 */ }
+}
+setInterval(pollForChanges, 7000);
+
+// 初始
+$('search').focus();
+buildChips();
+loadFirstPage();
+</script>
+
+</body>
+</html>

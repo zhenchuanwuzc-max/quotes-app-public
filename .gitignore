@@ -1,0 +1,27 @@
+# quotes-app 代码仓 .gitignore —— 追踪源码 + 脚本 + 文档，排除产物/备份/密钥
+
+# py2app 产物（28M，走 GitHub Release 不进 git）
+build/
+dist/
+
+# 备份 + 旧 iCloud 同步交换日志（数据侧的东西，不进代码仓）
+_backups/
+_sync/
+
+# 实验脚本（可选保留，先排除）
+_experiments/
+
+# GitHub PAT —— 永远不进 git
+.gh-token
+
+# iCloud 冲突副本
+* 2.py
+* 2.html
+* 2.md
+
+# 系统垃圾 + 缓存
+.DS_Store
+__pycache__/
+*.pyc
+*.log
+.update/

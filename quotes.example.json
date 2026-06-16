@@ -1,0 +1,33 @@
+{
+  "version": "0.1.0",
+  "updated": "2026-01-01T00:00:00+08:00",
+  "quotes": [
+    {
+      "id": "example-0001-aaaa-bbbb-cccc-000000000001",
+      "text": "The best time to plant a tree was 20 years ago. The second best time is now.",
+      "source": "Proverb",
+      "use_case": "decision-making",
+      "created_at": "2026-01-01T09:00:00+08:00",
+      "pinned": true,
+      "pinned_at": "2026-01-01T09:00:00+08:00"
+    },
+    {
+      "id": "example-0002-aaaa-bbbb-cccc-000000000002",
+      "text": "Simplicity is the ultimate sophistication.",
+      "source": "Leonardo da Vinci",
+      "use_case": "design",
+      "created_at": "2026-01-02T10:00:00+08:00",
+      "pinned": false,
+      "pinned_at": null
+    },
+    {
+      "id": "example-0003-aaaa-bbbb-cccc-000000000003",
+      "text": "What gets measured gets managed.",
+      "source": "Peter Drucker",
+      "use_case": "management",
+      "created_at": "2026-01-03T11:00:00+08:00",
+      "pinned": false,
+      "pinned_at": null
+    }
+  ]
+}
