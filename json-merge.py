@@ -4,9 +4,13 @@ git merge driver —— quotes.json 的 JSON-aware union 合并
 
 改自 ~/daily-todo/json-merge.py（同款范式）。关键差异：
   - tasks → quotes
-  - 较新判定 _recency 用 created_at（金句正文 append-only，不可编辑）
-  - 同 id 合并：done-OR-logic → **pinned 走 pinned_at LWW**（晚操作胜出，破 un-pin trap）
+  - 同 id 合并：**两个解耦的原子组各自 LWW，再组装**（推翻原 append-only）
+      * 正文原子组 {text,source,use_case,updated_at}：按 updated_at(兜底 created_at) 晚的整组取
+        —— 🔴 整组覆盖，禁逐字段拼（A改text+B改source 逐字段拼会产出错乱数据）
+      * pin 原子组 {pinned,pinned_at}：独立按 pinned_at 晚的取
+      * updated_at 相等时按正文内容字典序 tie-break（保双机反向 merge 收敛同状态）
   - 删除传播：完全照抄 daily-todo 的 base(%O) 三方 diff，**无 tombstones**
+    （编辑过的条目 updated_at 变 → o!=bse → 正确保留；前提：绝不批量刷历史 updated_at）
 
 注册（每台设备本地配置，sync.sh 会自愈注册）：
     git config merge.quotes-union.driver "python3 <此脚本> %O %A %B"
@@ -60,12 +64,35 @@ def quote_map(d):
     return {q.get("id"): q for q in (d.get("quotes") or []) if q.get("id")}
 
 
+def _content_recency(q):
+    """正文新近度：updated_at 优先，历史条目无此字段 → 兜底 created_at。永远返回 str。"""
+    return str(q.get("updated_at") or q.get("created_at") or "")
+
+
 def merge_same(a, b):
-    """同 id 两条合并：金句正文不可改，按 pinned_at 取晚的（LWW）。
-    都为 null（从没 pin 过）→ 取任一（其余字段相同）。"""
-    pa = a.get("pinned_at") or ""
-    pb = b.get("pinned_at") or ""
-    return a if pa >= pb else b
+    """同 id 两条合并：两个解耦原子组各自 LWW 后组装。
+    - 正文原子组 {text,source,use_case,updated_at}：按 _content_recency 晚的整组取
+      （updated_at 相等 → 按 id 字典序 tie-break，保双机反向 merge 收敛同状态）
+    - pin 原子组 {pinned,pinned_at}：独立按 pinned_at 晚的取
+    解耦后：改正文不覆盖另一机刚 pin 的状态。所有比较前 or "" 兜底防 None 异类型崩。"""
+    # 正文原子组：整组取晚侧（禁逐字段拼）
+    ra, rb = _content_recency(a), _content_recency(b)
+    if ra != rb:
+        content_src = a if ra > rb else b
+    else:
+        # tie：updated_at 相等（同 id，id 无法区分），按正文内容字典序确定取一侧
+        # —— 保证双机反向 merge 收敛到同一结果（交换律），破解 >= 非确定性
+        ka = (a.get("text") or "", a.get("source") or "", a.get("use_case") or "")
+        kb = (b.get("text") or "", b.get("source") or "", b.get("use_case") or "")
+        content_src = a if ka <= kb else b
+    # pin 原子组：独立按 pinned_at LWW
+    pa, pb = (a.get("pinned_at") or ""), (b.get("pinned_at") or "")
+    pin_src = a if pa >= pb else b
+    # 组装：以正文晚侧为基底，叠加 pin 晚侧的 pin 字段
+    merged = dict(content_src)
+    merged["pinned"] = pin_src.get("pinned", False)
+    merged["pinned_at"] = pin_src.get("pinned_at")
+    return merged
 
 
 def union(ours, theirs, base):

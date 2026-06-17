@@ -144,16 +144,18 @@
   }
   .quote .actions button:hover { background: #f0ece0; }
   .quote .actions .copy:hover { color: #1f6feb; }
+  .quote .actions .edit:hover { color: #218838; }
   .quote .actions .del:hover { color: #c00; }
-  /* 复制/删除：默认完全不占位（absolute 抽离 + 隐藏）；hover 时浮出，停在 ☆ 左侧，带半透明奶油白底盖住文字 */
-  .quote .actions .copy, .quote .actions .del {
+  /* 复制/编辑/删除：默认完全不占位（absolute 抽离 + 隐藏）；hover 时浮出，停在 ☆ 左侧，带半透明奶油白底盖住文字 */
+  .quote .actions .copy, .quote .actions .edit, .quote .actions .del {
     position: absolute; top: 0; opacity: 0; pointer-events: none;
     transition: opacity 0.12s; background: rgba(255,254,251,0.95);
     box-shadow: -6px 0 6px rgba(255,254,251,0.95);
   }
   .quote .actions .del { right: 30px; }   /* ☆ 宽约 30px，× 紧贴其左 */
-  .quote .actions .copy { right: 56px; }  /* 复制 在 × 左侧 */
-  .quote:hover .actions .copy, .quote:hover .actions .del { opacity: 1; pointer-events: auto; }
+  .quote .actions .edit { right: 56px; }  /* 编辑 在 × 左侧 */
+  .quote .actions .copy { right: 92px; }  /* 复制 在 编辑 左侧（编辑两字约宽 36px）*/
+  .quote:hover .actions .copy, .quote:hover .actions .edit, .quote:hover .actions .del { opacity: 1; pointer-events: auto; }
   /* 收藏星：常显（置顶/未置顶不同色），永远在最右，点击切换 */
   .quote .actions .star {
     font-size: 15px; padding: 2px 5px; line-height: 1;
@@ -211,14 +213,15 @@
     <button class="add-pill" onclick="toggleAdd()"><span>＋</span> 新金句</button>
   </div>
 
-  <!-- 新金句弹层（默认隐藏）-->
+  <!-- 新金句 / 编辑弹层（默认隐藏；新增与编辑复用同一弹层，靠 state.editingId 区分）-->
   <div class="add-pop" id="add-pop">
     <textarea id="text" placeholder="金句正文…"></textarea>
     <input class="source-input" id="source" type="text" placeholder="来源（书名 / 人名 / 场景，可选）" />
     <div class="uc-picker" id="uc-picker"><!-- 五个标签点选，JS 渲染 --></div>
     <div class="actions">
-      <span class="hint">⌘ + ↵ 快捷添加 · 标签可不选</span>
-      <button class="save" onclick="addQuote()">添加</button>
+      <span class="hint" id="add-hint">⌘ + ↵ 快捷添加 · 标签可不选</span>
+      <button class="save" id="cancel-edit" onclick="cancelEdit()" style="display:none;background:#eee;color:#444">取消</button>
+      <button class="save" id="save-btn" onclick="submitQuote()">添加</button>
     </div>
   </div>
 
@@ -263,7 +266,9 @@ const UNTAGGED = '未分类';  // 伪 chip，筛 use_case 为空的历史/未打
 const state = {
   query: '',        // 搜索框文字
   chip: '',         // 选中的 use_case chip（空 = 全部）
-  newUseCase: '',   // 新增框当前选中的标签（空 = 未选）
+  newUseCase: '',   // 新增/编辑框当前选中的标签（空 = 未选）
+  editingId: null,           // 非 null = 编辑态（弹层在编辑此条），null = 新增态
+  editingBaseUpdatedAt: null, // 编辑时读到的 updated_at，提交做 CAS 防 stale write
   offset: 0, total: 0, loaded: 0, loading: false, done: false,
 };
 
@@ -305,6 +310,7 @@ function renderQuote(q) {
       <div class="actions">
         <button class="star ${pinned ? 'on' : ''}" onclick="togglePin('${q.id}', ${pinned})" title="${pinned ? '取消置顶' : '置顶'}">${pinned ? '★' : '☆'}</button>
         <button class="copy" onclick="copyQuote('${q.id}')" title="复制正文">复制</button>
+        <button class="edit" onclick="editQuote('${q.id}')" title="编辑">编辑</button>
         <button class="del" onclick="delQuote('${q.id}')" title="删除">×</button>
       </div>
     </div>
@@ -318,8 +324,8 @@ function updateHeader() {
   $('list-count').textContent = `已显示 ${state.loaded} / ${state.total} 条`;
 }
 
-// 缓存当前正文，供复制（避免 DOM 转义往返）
-const _textCache = {};
+// 缓存整条金句（id→{text,source,use_case,updated_at,...}），供复制 + 编辑预填
+const _quoteCache = {};
 
 async function loadFirstPage() {
   state.offset = 0; state.loaded = 0; state.done = false;
@@ -332,7 +338,7 @@ async function loadFirstPage() {
     state.total = data.total;
     state.loaded = data.quotes.length;
     state.offset = data.quotes.length;
-    data.quotes.forEach(q => _textCache[q.id] = q.text);
+    data.quotes.forEach(q => _quoteCache[q.id] = q);
 
     const list = $('list');
     if (!data.quotes.length) {
@@ -352,7 +358,7 @@ async function loadUntagged() {
   try {
     const data = await fetchQuotes('', 0, 9999);
     const empties = data.quotes.filter(q => !(q.use_case || '').trim());
-    empties.forEach(q => _textCache[q.id] = q.text);
+    empties.forEach(q => _quoteCache[q.id] = q);
     state.total = data.total;
     state.loaded = empties.length;
     state.done = true;  // 全量已拉，无更多
@@ -374,7 +380,7 @@ async function loadMore() {
     const data = await fetchQuotes(effectiveQuery(), state.offset, PAGE_SIZE);
     if (!data.quotes.length) { state.done = true; $('end').style.display = 'block'; }
     else {
-      data.quotes.forEach(q => _textCache[q.id] = q.text);
+      data.quotes.forEach(q => _quoteCache[q.id] = q);
       $('list').insertAdjacentHTML('beforeend', data.quotes.map(renderQuote).join(''));
       state.offset += data.quotes.length;
       state.loaded += data.quotes.length;
@@ -421,7 +427,7 @@ function filterByChip(uc) {
 
 // ===== 复制 =====
 async function copyQuote(id) {
-  const text = _textCache[id] || '';
+  const text = (_quoteCache[id] && _quoteCache[id].text) || '';
   try {
     await navigator.clipboard.writeText(text);
     toast('已复制');
@@ -461,10 +467,62 @@ function pickUseCase(uc) {
   state.newUseCase = (state.newUseCase === uc) ? '' : uc;
   renderUcPicker();
 }
+// 弹层切「新增态」UI（标题/按钮/取消键）
+function setAddMode() {
+  state.editingId = null; state.editingBaseUpdatedAt = null;
+  $('save-btn').textContent = '添加';
+  $('cancel-edit').style.display = 'none';
+  $('add-hint').textContent = '⌘ + ↵ 快捷添加 · 标签可不选';
+}
+// 弹层切「编辑态」UI
+function setEditMode() {
+  $('save-btn').textContent = '保存编辑';
+  $('cancel-edit').style.display = '';
+  $('add-hint').textContent = '⌘ + ↵ 保存 · 编辑同一条';
+}
+
 function toggleAdd() {
   const pop = $('add-pop');
+  // 从编辑态点「＋ 新金句」→ 先清成新增态，再开
+  const wasOpen = pop.classList.contains('open');
+  if (state.editingId && !wasOpen) { /* 已关，正常开新增 */ }
   pop.classList.toggle('open');
-  if (pop.classList.contains('open')) { renderUcPicker(); $('text').focus(); }
+  if (pop.classList.contains('open')) {
+    // 打开即视为新增态（编辑走 editQuote 单独入口）
+    $('text').value = ''; $('source').value = ''; state.newUseCase = '';
+    setAddMode();
+    renderUcPicker(); $('text').focus();
+  } else {
+    setAddMode();  // 关闭也复位，避免残留编辑态
+  }
+}
+
+// 进入编辑态：预填该条、记录 base updated_at 做 CAS、暂停轮询打断
+function editQuote(id) {
+  const q = _quoteCache[id];
+  if (!q) { toast('该条未加载，刷新后重试'); return; }
+  state.editingId = id;
+  state.editingBaseUpdatedAt = q.updated_at || q.created_at || null;  // 历史无 updated_at → 用 created_at
+  state.newUseCase = (q.use_case || '').trim();
+  $('text').value = q.text || '';
+  $('source').value = q.source || '';
+  const pop = $('add-pop');
+  pop.classList.add('open');
+  setEditMode();
+  renderUcPicker();
+  $('text').focus();
+}
+
+function cancelEdit() {
+  $('text').value = ''; $('source').value = '';
+  $('add-pop').classList.remove('open');
+  setAddMode();
+}
+
+// 统一提交入口：editingId 有值走编辑 PATCH，否则走新增 POST
+async function submitQuote() {
+  if (state.editingId) return saveEdit();
+  return addQuote();
 }
 
 async function addQuote() {
@@ -486,6 +544,35 @@ async function addQuote() {
       buildChips();
       loadFirstPage();
     } else toast('添加失败：' + (data.error || '未知'));
+  } catch (e) { toast('网络错误：' + e.message); }
+}
+
+// 保存编辑：带 expected_updated_at 做 CAS；409 = 另一端已改过 → 提示重载
+async function saveEdit() {
+  const id = state.editingId;
+  const text = $('text').value.trim();
+  if (!text) { toast('金句正文不能空'); $('text').focus(); return; }
+  const source = $('source').value.trim();
+  const use_case = state.newUseCase;
+  try {
+    const resp = await fetch(`/quotes/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text, source, use_case,
+        expected_updated_at: state.editingBaseUpdatedAt,
+      }),
+    });
+    if (resp.status === 409) {
+      toast('这条已被另一端改过，正在重载…');
+      cancelEdit(); buildChips(); loadFirstPage();
+      return;
+    }
+    const data = await resp.json();
+    if (data.ok) {
+      cancelEdit();
+      toast('已保存');
+      buildChips(); loadFirstPage();
+    } else toast('保存失败：' + (data.error || '未知'));
   } catch (e) { toast('网络错误：' + e.message); }
 }
 
@@ -529,7 +616,7 @@ $('search').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { clearTimeout(searchTimer); doSearch(); }
 });
 $('text').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addQuote();
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitQuote();
 });
 
 // 列表到底自动加载
@@ -644,6 +731,8 @@ function applyNewQuotes() {
   loadFirstPage();
 }
 async function pollForChanges() {
+  // 编辑态时跳过：避免 applyNewQuotes 重渲染丢掉编辑弹层 + 防 stale write 窗口被搅动
+  if (state.editingId) return;
   // 用户正在输入搜索框 / 新增框时跳过，避免打断
   if (document.activeElement === $('search') || document.activeElement === $('text')
       || document.activeElement === $('source') || document.activeElement === $('use_case')) return;

@@ -6,13 +6,18 @@ quotes-app 本地 HTTP 服务（v0.1.0：JSON-as-truth + git 同步，弃 SQLite
 - GET    /quotes?q=&offset=&limit=  → 内存 filter 检索 text/source/use_case；分页
 - POST   /quotes/add    → 单条写入 {text, source?, use_case?}
 - DELETE /quotes/<id>   → 删一条（从数组移除；跨机删除靠 git base-diff，无 tombstone）
+- PATCH  /quotes/<id>     → 编辑正文 {text, source?, use_case?, expected_updated_at?}（CAS 防 stale write）
 - PATCH  /quotes/<id>/pin → 切换收藏置顶 {pinned: bool}
 - POST   /sync-now      → 手动触发 git 同步，回 sync.sh 写的状态
 - GET    /health        → {ok, total}
 
 数据：~/quotes/quotes.json（单 JSON 对象，本地真库，git 仓根；不进 iCloud）
-  格式：{"updated": ISO, "quotes": [{id,text,source,use_case,created_at,pinned,pinned_at}]}
-  金句正文 append-only（删了重存）；唯一可变字段 = pinned（配 pinned_at 走 LWW）
+  格式：{"updated": ISO, "quotes": [{id,text,source,use_case,created_at,updated_at,pinned,pinned_at}]}
+  可变字段（推翻原 append-only 设计）：
+    - 正文原子组 {text,source,use_case,updated_at}：编辑走 updated_at LWW（整组覆盖，禁逐字段拼）
+    - pin 原子组 {pinned,pinned_at}：独立走 pinned_at LWW
+    两组在 json-merge.py 解耦合并。历史条目无 updated_at → 一律按 created_at 兜底。
+    🔴 严禁一次性迁移脚本批量补 updated_at——会让所有历史条目 o!=bse，删除传播全局瘫痪。
 同步：git 私有仓 + json-merge.py union 合并驱动（照抄 daily-todo 范式）
 端口：localhost:8767（占用 fallback 8770，install.sh 检测）
 
@@ -387,12 +392,14 @@ def add_quote(text: str, source: str = "", use_case: str = "") -> dict:
         raise ValueError("text 不能为空")
     source = (source or "").strip()
     use_case = (use_case or "").strip()
+    ts = now_iso()
     quote = {
         "id": str(uuid.uuid4()),
         "text": text,
         "source": source,
         "use_case": use_case,
-        "created_at": now_iso(),
+        "created_at": ts,
+        "updated_at": ts,  # 新增即等于 created_at；编辑时刷新，走正文 LWW
         "pinned": False,
         "pinned_at": None,
     }
@@ -433,6 +440,46 @@ def set_pin(qid: str, pinned: bool) -> dict:
             raise KeyError(f"quote {qid} not found")
         target["pinned"] = bool(pinned)
         target["pinned_at"] = now_iso()
+        _atomic_write(data)
+    schedule_sync()
+    return target
+
+
+class StaleEditError(Exception):
+    """编辑时 expected_updated_at 与库内当前值不符（另一端已改过）→ 前端应重载。"""
+    def __init__(self, current_updated_at):
+        self.current_updated_at = current_updated_at
+        super().__init__("stale edit: quote changed since loaded")
+
+
+def edit_quote(qid: str, text: str, source: str = "", use_case: str = "",
+               expected_updated_at=None) -> dict:
+    """编辑正文原子组 {text,source,use_case,updated_at}，刷新 updated_at 走 LWW。
+    不动 created_at / pinned / pinned_at（与 pin 原子组解耦）。
+    expected_updated_at 非 None 时做 CAS：与库内当前值不符则抛 StaleEditError（防 stale write）。"""
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("text 不能为空")
+    source = (source or "").strip()
+    use_case = (use_case or "").strip()
+    with _write_lock:
+        data = read_data()
+        target = None
+        for q in data["quotes"]:
+            if q.get("id") == qid:
+                target = q
+                break
+        if target is None:
+            raise KeyError(f"quote {qid} not found")
+        # CAS：历史条目无 updated_at → 用 created_at 兜底比对
+        if expected_updated_at is not None:
+            cur = target.get("updated_at") or target.get("created_at") or ""
+            if str(expected_updated_at) != str(cur):
+                raise StaleEditError(cur)
+        target["text"] = text
+        target["source"] = source
+        target["use_case"] = use_case
+        target["updated_at"] = now_iso()
         _atomic_write(data)
     schedule_sync()
     return target
@@ -591,8 +638,38 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PATCH(self):
         # PATCH /quotes/<id>/pin  body {pinned: bool}
+        # PATCH /quotes/<id>      body {text, source?, use_case?, expected_updated_at?}
         parsed = urlparse(self.path)
         parts = parsed.path.strip("/").split("/")
+        if len(parts) == 2 and parts[0] == "quotes":
+            qid = parts[1]
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            except Exception as e:
+                self._send(400, json.dumps({"error": f"invalid json: {e}"}))
+                return
+            try:
+                quote = edit_quote(
+                    qid,
+                    text=payload.get("text", ""),
+                    source=payload.get("source", ""),
+                    use_case=payload.get("use_case", ""),
+                    expected_updated_at=payload.get("expected_updated_at"),
+                )
+                self._send(200, json.dumps({"ok": True, "quote": quote}, ensure_ascii=False))
+            except StaleEditError as e:
+                # 409：另一端已改过，前端应提示重载
+                self._send(409, json.dumps({
+                    "error": "stale", "current_updated_at": e.current_updated_at,
+                }, ensure_ascii=False))
+            except ValueError as e:
+                self._send(400, json.dumps({"error": str(e)}))
+            except KeyError as e:
+                self._send(404, json.dumps({"error": str(e)}))
+            except Exception as e:
+                self._send(500, json.dumps({"error": str(e)}))
+            return
         if len(parts) == 3 and parts[0] == "quotes" and parts[2] == "pin":
             qid = parts[1]
             length = int(self.headers.get("Content-Length", 0))
