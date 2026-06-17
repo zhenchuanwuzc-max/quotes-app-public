@@ -65,38 +65,71 @@
   .chip:hover { border-color: #1f6feb; color: #1f6feb; }
   .chip.active { background: #1f6feb; color: #fff; border-color: #1f6feb; }
 
-  /* 新金句弹层（默认隐藏；点 ＋ 才展开，平时完全不占列表空间）*/
-  .add-pop {
-    background: #fffefb; border: 1px solid #efe9d8; border-radius: 10px;
-    padding: 12px 14px; margin: 8px 0 4px; display: none;
+  /* 新金句 / 编辑：右侧滑出抽屉（对齐选题 App 范式）——新增与编辑复用同一抽屉，靠 state.editingId 区分 */
+  .panel-mask {
+    position: fixed; inset: 0; background: rgba(20,20,24,0.28); z-index: 100;
+    opacity: 0; pointer-events: none; transition: opacity 0.22s;
   }
-  .add-pop.open { display: block; }
-  .add-pop textarea {
-    width: 100%; min-height: 64px; padding: 9px 12px; font-size: 15px;
+  .panel-mask.show { opacity: 1; pointer-events: auto; }
+  .panel {
+    position: fixed; top: 0; right: 0; height: 100%; width: 420px; max-width: 92vw;
+    background: #fffefb; z-index: 101; box-shadow: -8px 0 32px rgba(0,0,0,0.12);
+    transform: translateX(100%); transition: transform 0.26s cubic-bezier(.32,.72,0,1);
+    display: flex; flex-direction: column;
+  }
+  .panel.show { transform: translateX(0); }
+  .panel-head {
+    display: flex; align-items: center; gap: 10px; padding: 18px 22px 14px;
+    border-bottom: 1px solid #efe9d8;
+  }
+  .panel-head h2 {
+    font-size: 16px; font-weight: 600; margin: 0;
+    font-family: Georgia, "Times New Roman", "PingFang SC", serif; color: #1f1f1f;
+  }
+  .panel-head .x {
+    margin-left: auto; border: none; background: none; font-size: 20px; color: #999;
+    cursor: pointer; line-height: 1; padding: 4px 8px; border-radius: 8px;
+  }
+  .panel-head .x:hover { background: #f0ece0; color: #2a2a2a; }
+  .panel-body {
+    padding: 16px 22px; overflow-y: auto; flex: 1;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .panel textarea {
+    width: 100%; min-height: 120px; padding: 9px 12px; font-size: 15px;
     border: 1px solid #e5dfd0; border-radius: 6px; resize: vertical;
     font-family: inherit; line-height: 1.5; background: #fff;
   }
-  .add-pop textarea:focus, .add-pop input:focus { outline: none; border-color: #1f6feb; }
-  .add-pop .source-input {
-    width: 100%; box-sizing: border-box; margin-top: 8px;
+  .panel textarea:focus, .panel input:focus { outline: none; border-color: #1f6feb; }
+  .panel .source-input {
+    width: 100%; box-sizing: border-box;
     padding: 8px 12px; font-size: 14px;
     border: 1px solid #e5dfd0; border-radius: 6px; background: #fff;
   }
-  .add-pop .uc-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .add-pop .uc-picker .uc-tag {
+  .panel .uc-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+  .panel .uc-picker .uc-tag {
     font-size: 12px; padding: 3px 11px; border-radius: 13px;
     background: #fffefb; color: #777; border: 1px solid #e5dfd0; cursor: pointer;
     user-select: none; transition: all 0.12s;
   }
-  .add-pop .uc-picker .uc-tag:hover { border-color: #1f6feb; color: #1f6feb; }
-  .add-pop .uc-picker .uc-tag.sel { background: #1f6feb; color: #fff; border-color: #1f6feb; }
-  .add-pop .actions { margin-top: 10px; display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
-  .add-pop .hint { font-size: 11px; color: #bbb; }
-  .add-pop button.save {
-    padding: 8px 22px; font-size: 14px;
+  .panel .uc-picker .uc-tag:hover { border-color: #1f6feb; color: #1f6feb; }
+  .panel .uc-picker .uc-tag.sel { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+  .panel .hint { font-size: 11px; color: #bbb; }
+  .panel-foot {
+    padding: 14px 22px 20px; border-top: 1px solid #efe9d8;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .panel-foot .hint { flex: 1; }
+  .panel-foot button.save {
+    padding: 9px 22px; font-size: 14px;
     background: #28a745; color: #fff; border: none; border-radius: 6px; cursor: pointer;
   }
-  .add-pop button.save:hover { background: #218838; }
+  .panel-foot button.save:hover { background: #218838; }
+  .panel-foot button.cancel {
+    padding: 9px 18px; font-size: 14px;
+    background: #f3efe4; color: #444; border: 1px solid #e5dfd0; border-radius: 6px; cursor: pointer;
+  }
+  .panel-foot button.cancel:hover { background: #ece6d6; }
 
   .list-header {
     display: flex; justify-content: space-between; align-items: baseline;
@@ -213,18 +246,6 @@
     <button class="add-pill" onclick="toggleAdd()"><span>＋</span> 新金句</button>
   </div>
 
-  <!-- 新金句 / 编辑弹层（默认隐藏；新增与编辑复用同一弹层，靠 state.editingId 区分）-->
-  <div class="add-pop" id="add-pop">
-    <textarea id="text" placeholder="金句正文…"></textarea>
-    <input class="source-input" id="source" type="text" placeholder="来源（书名 / 人名 / 场景，可选）" />
-    <div class="uc-picker" id="uc-picker"><!-- 五个标签点选，JS 渲染 --></div>
-    <div class="actions">
-      <span class="hint" id="add-hint">⌘ + ↵ 快捷添加 · 标签可不选</span>
-      <button class="save" id="cancel-edit" onclick="cancelEdit()" style="display:none;background:#eee;color:#444">取消</button>
-      <button class="save" id="save-btn" onclick="submitQuote()">添加</button>
-    </div>
-  </div>
-
   <div class="search-box">
     <input id="search" type="text" placeholder="搜金句正文 / 来源 / 用途…（直接打字）" autofocus />
   </div>
@@ -244,6 +265,25 @@
   <div id="loading" class="loading" style="display:none">加载中…</div>
   <div id="end" class="end" style="display:none">— 到底了 —</div>
 </div></div><!-- /list-scroll -->
+
+<!-- 新金句 / 编辑抽屉（右侧滑出；新增与编辑复用同一抽屉，靠 state.editingId 区分）-->
+<div class="panel-mask" id="panel-mask" onclick="cancelEdit()"></div>
+<aside class="panel" id="add-pop">
+  <div class="panel-head">
+    <h2 id="panel-title">添加金句</h2>
+    <button class="x" id="panel-close" onclick="cancelEdit()" title="关闭">✕</button>
+  </div>
+  <div class="panel-body">
+    <textarea id="text" placeholder="金句正文…"></textarea>
+    <input class="source-input" id="source" type="text" placeholder="来源（书名 / 人名 / 场景，可选）" />
+    <div class="uc-picker" id="uc-picker"><!-- 五个标签点选，JS 渲染 --></div>
+  </div>
+  <div class="panel-foot">
+    <span class="hint" id="add-hint">⌘ + ↵ 快捷添加 · 标签可不选</span>
+    <button class="cancel" id="cancel-edit" onclick="cancelEdit()" style="display:none">取消</button>
+    <button class="save" id="save-btn" onclick="submitQuote()">添加</button>
+  </div>
+</aside>
 
 <div class="toast" id="toast"><span id="toastText"></span><div class="toast-bar-wrap" id="toastBarWrap"><div class="toast-bar" id="toastBar"></div></div></div>
 
@@ -467,34 +507,46 @@ function pickUseCase(uc) {
   state.newUseCase = (state.newUseCase === uc) ? '' : uc;
   renderUcPicker();
 }
-// 弹层切「新增态」UI（标题/按钮/取消键）
+// 抽屉切「新增态」UI（标题/按钮/取消键）
 function setAddMode() {
   state.editingId = null; state.editingBaseUpdatedAt = null;
+  $('panel-title').textContent = '添加金句';
   $('save-btn').textContent = '添加';
   $('cancel-edit').style.display = 'none';
   $('add-hint').textContent = '⌘ + ↵ 快捷添加 · 标签可不选';
 }
-// 弹层切「编辑态」UI
+// 抽屉切「编辑态」UI
 function setEditMode() {
+  $('panel-title').textContent = '编辑金句';
   $('save-btn').textContent = '保存编辑';
   $('cancel-edit').style.display = '';
   $('add-hint').textContent = '⌘ + ↵ 保存 · 编辑同一条';
 }
 
+// 抽屉开/关：panel 与 mask 同步 .show（右侧滑出范式）
+function openPanel() {
+  $('add-pop').classList.add('show');
+  $('panel-mask').classList.add('show');
+}
+function closePanel() {
+  $('add-pop').classList.remove('show');
+  $('panel-mask').classList.remove('show');
+}
+
 function toggleAdd() {
   const pop = $('add-pop');
-  // 从编辑态点「＋ 新金句」→ 先清成新增态，再开
-  const wasOpen = pop.classList.contains('open');
-  if (state.editingId && !wasOpen) { /* 已关，正常开新增 */ }
-  pop.classList.toggle('open');
-  if (pop.classList.contains('open')) {
-    // 打开即视为新增态（编辑走 editQuote 单独入口）
-    $('text').value = ''; $('source').value = ''; state.newUseCase = '';
+  // 已展开 → 收起（复位成新增态，避免残留编辑态）；已收起 → 以新增态打开
+  if (pop.classList.contains('show')) {
+    closePanel();
     setAddMode();
-    renderUcPicker(); $('text').focus();
-  } else {
-    setAddMode();  // 关闭也复位，避免残留编辑态
+    return;
   }
+  // 打开即视为新增态（编辑走 editQuote 单独入口）
+  $('text').value = ''; $('source').value = ''; state.newUseCase = '';
+  setAddMode();
+  renderUcPicker();
+  openPanel();
+  $('text').focus();
 }
 
 // 进入编辑态：预填该条、记录 base updated_at 做 CAS、暂停轮询打断
@@ -506,16 +558,15 @@ function editQuote(id) {
   state.newUseCase = (q.use_case || '').trim();
   $('text').value = q.text || '';
   $('source').value = q.source || '';
-  const pop = $('add-pop');
-  pop.classList.add('open');
   setEditMode();
   renderUcPicker();
+  openPanel();
   $('text').focus();
 }
 
 function cancelEdit() {
   $('text').value = ''; $('source').value = '';
-  $('add-pop').classList.remove('open');
+  closePanel();
   setAddMode();
 }
 
@@ -540,7 +591,7 @@ async function addQuote() {
       $('text').value = ''; $('source').value = ''; state.newUseCase = '';
       toast(`已存入 #${data.total}`);
       $('search').value = ''; state.query = ''; state.chip = '';
-      $('add-pop').classList.remove('open');   // 加完收起，列表最大化
+      closePanel();   // 加完收起，列表最大化
       buildChips();
       loadFirstPage();
     } else toast('添加失败：' + (data.error || '未知'));
@@ -617,6 +668,10 @@ $('search').addEventListener('keydown', (e) => {
 });
 $('text').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitQuote();
+});
+// Esc 关抽屉（仅当抽屉展开时）
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('add-pop').classList.contains('show')) cancelEdit();
 });
 
 // 列表到底自动加载
