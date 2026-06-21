@@ -529,6 +529,27 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, INDEX_HTML, "text/html")
             return
 
+        # vendored 第三方静态资源（Vditor 编辑器 JS/CSS/lute 等；从 SCRIPT_DIR/vendor 读）
+        if parsed.path.startswith("/vendor/"):
+            rel = os.path.normpath(parsed.path[len("/vendor/"):].lstrip("/"))
+            if rel.startswith("..") or os.path.isabs(rel):
+                self._send(403, json.dumps({"error": "forbidden"}))
+                return
+            fpath = os.path.join(SCRIPT_DIR, "vendor", rel)
+            if os.path.isfile(fpath):
+                ext = os.path.splitext(fpath)[1]
+                ctype = {".js": "application/javascript", ".css": "text/css",
+                         ".wasm": "application/wasm", ".json": "application/json",
+                         ".map": "application/json"}.get(ext, "application/octet-stream")
+                try:
+                    with open(fpath, "rb") as f:
+                        self._send(200, f.read(), ctype)
+                except Exception as e:
+                    self._send(500, json.dumps({"error": str(e)}))
+            else:
+                self._send(404, json.dumps({"error": "vendor not found"}))
+            return
+
         if parsed.path == "/quotes":
             qs = parse_qs(parsed.query)
             q = (qs.get("q") or [""])[0]

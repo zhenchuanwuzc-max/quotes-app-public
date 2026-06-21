@@ -1,7 +1,7 @@
 """
 py2app 打包脚本
 用法：
-    cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/Ocean同步使用/Ocean/工具/quotes-app
+    cd ~/quotes-app
     ~/daily-todo/venv/bin/python setup.py py2app -A   # alias 模式（开发，快）
     ~/daily-todo/venv/bin/python setup.py py2app      # 完整打包（产 dist/quotes.app）
 产物：dist/quotes.app
@@ -16,7 +16,20 @@ VERSION = (
 )
 
 APP = ["desktop_app.py"]
-DATA_FILES = ["index.html", "server.py", "VERSION"]
+
+
+# 递归收集 vendor/（Vditor 编辑器库），保持目录结构打进 .app 的 Resources/vendor/
+# 否则打包出的 .app 里没有 vendor，server serve /vendor/ 全 404、编辑器加载不出来
+def _collect_vendor(base="vendor"):
+    out = []
+    for root, _dirs, files in os.walk(base):
+        keep = [os.path.join(root, f) for f in files if not f.startswith(".")]
+        if keep:
+            out.append((root, keep))  # py2app: (目标相对目录, [文件]) → Resources/<root>/
+    return out
+
+
+DATA_FILES = ["index.html", "server.py", "VERSION"] + _collect_vendor()
 
 OPTIONS = {
     "argv_emulation": False,

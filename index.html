@@ -65,71 +65,43 @@
   .chip:hover { border-color: #1f6feb; color: #1f6feb; }
   .chip.active { background: #1f6feb; color: #fff; border-color: #1f6feb; }
 
-  /* 新金句 / 编辑：右侧滑出抽屉（对齐选题 App 范式）——新增与编辑复用同一抽屉，靠 state.editingId 区分 */
-  .panel-mask {
-    position: fixed; inset: 0; background: rgba(20,20,24,0.28); z-index: 100;
-    opacity: 0; pointer-events: none; transition: opacity 0.22s;
-  }
+  /* 新增/编辑面板（右侧滑出，对齐选题库 drawer）*/
+  .panel-mask { position: fixed; inset: 0; background: rgba(20,20,24,.28); z-index: 100;
+    opacity: 0; pointer-events: none; transition: opacity .22s; }
   .panel-mask.show { opacity: 1; pointer-events: auto; }
-  .panel {
-    position: fixed; top: 0; right: 0; height: 100%; width: 420px; max-width: 92vw;
-    background: #fffefb; z-index: 101; box-shadow: -8px 0 32px rgba(0,0,0,0.12);
-    transform: translateX(100%); transition: transform 0.26s cubic-bezier(.32,.72,0,1);
-    display: flex; flex-direction: column;
-  }
+  .panel { position: fixed; top: 0; right: 0; height: 100%; width: 420px; max-width: 92vw;
+    background: #fffefb; z-index: 101; box-shadow: -8px 0 32px rgba(0,0,0,.12);
+    transform: translateX(100%); transition: transform .26s cubic-bezier(.32,.72,0,1);
+    display: flex; flex-direction: column; }
   .panel.show { transform: translateX(0); }
-  .panel-head {
-    display: flex; align-items: center; gap: 10px; padding: 18px 22px 14px;
-    border-bottom: 1px solid #efe9d8;
-  }
-  .panel-head h2 {
-    font-size: 16px; font-weight: 600; margin: 0;
-    font-family: Georgia, "Times New Roman", "PingFang SC", serif; color: #1f1f1f;
-  }
-  .panel-head .x {
-    margin-left: auto; border: none; background: none; font-size: 20px; color: #999;
-    cursor: pointer; line-height: 1; padding: 4px 8px; border-radius: 8px;
-  }
+  .panel-head { display: flex; align-items: center; gap: 10px; padding: 18px 22px 14px;
+    border-bottom: 1px solid #efe9d8; }
+  .panel-head h2 { font-size: 16px; margin: 0; font-weight: 700; color: #1f1f1f; }
+  .panel-head .x { margin-left: auto; border: none; background: none; font-size: 20px; color: #999;
+    cursor: pointer; line-height: 1; padding: 4px 8px; border-radius: 8px; }
   .panel-head .x:hover { background: #f0ece0; color: #2a2a2a; }
-  .panel-body {
-    padding: 16px 22px; overflow-y: auto; flex: 1;
-    display: flex; flex-direction: column; gap: 12px;
-  }
-  .panel textarea {
-    width: 100%; min-height: 120px; padding: 9px 12px; font-size: 15px;
-    border: 1px solid #e5dfd0; border-radius: 6px; resize: vertical;
-    font-family: inherit; line-height: 1.5; background: #fff;
-  }
-  .panel textarea:focus, .panel input:focus { outline: none; border-color: #1f6feb; }
-  .panel .source-input {
-    width: 100%; box-sizing: border-box;
-    padding: 8px 12px; font-size: 14px;
-    border: 1px solid #e5dfd0; border-radius: 6px; background: #fff;
-  }
-  .panel .uc-picker { display: flex; flex-wrap: wrap; gap: 6px; }
-  .panel .uc-picker .uc-tag {
-    font-size: 12px; padding: 3px 11px; border-radius: 13px;
+  .panel-body { padding: 18px 22px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px; }
+  .fld { display: flex; flex-direction: column; gap: 6px; }
+  .fld label { font-size: 12px; color: #888; font-weight: 600; }
+  .fld .hint { font-size: 11px; color: #bbb; font-weight: 400; }
+  .fld input, .fld textarea { width: 100%; box-sizing: border-box; padding: 11px 13px;
+    border: 1px solid #e5dfd0; border-radius: 10px; font-size: 14px; outline: none;
+    background: #fff; font-family: inherit; color: #1f1f1f; resize: vertical; line-height: 1.5; }
+  .fld input:focus, .fld textarea:focus { border-color: #1f6feb; box-shadow: 0 0 0 3px rgba(31,111,235,0.12); }
+  .uc-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+  .uc-picker .uc-tag {
+    font-size: 12px; padding: 4px 12px; border-radius: 13px;
     background: #fffefb; color: #777; border: 1px solid #e5dfd0; cursor: pointer;
     user-select: none; transition: all 0.12s;
   }
-  .panel .uc-picker .uc-tag:hover { border-color: #1f6feb; color: #1f6feb; }
-  .panel .uc-picker .uc-tag.sel { background: #1f6feb; color: #fff; border-color: #1f6feb; }
-  .panel .hint { font-size: 11px; color: #bbb; }
-  .panel-foot {
-    padding: 14px 22px 20px; border-top: 1px solid #efe9d8;
-    display: flex; align-items: center; gap: 10px;
-  }
-  .panel-foot .hint { flex: 1; }
-  .panel-foot button.save {
-    padding: 9px 22px; font-size: 14px;
-    background: #28a745; color: #fff; border: none; border-radius: 6px; cursor: pointer;
-  }
-  .panel-foot button.save:hover { background: #218838; }
-  .panel-foot button.cancel {
-    padding: 9px 18px; font-size: 14px;
-    background: #f3efe4; color: #444; border: 1px solid #e5dfd0; border-radius: 6px; cursor: pointer;
-  }
-  .panel-foot button.cancel:hover { background: #ece6d6; }
+  .uc-picker .uc-tag:hover { border-color: #1f6feb; color: #1f6feb; }
+  .uc-picker .uc-tag.sel { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+  .panel-foot { padding: 14px 22px 20px; border-top: 1px solid #efe9d8; display: flex; gap: 10px; }
+  .panel-foot .btn { flex: 1; padding: 11px 0; font-size: 14px; border-radius: 8px; cursor: pointer; border: none; }
+  .panel-foot .btn.save { background: #28a745; color: #fff; }
+  .panel-foot .btn.save:hover { background: #218838; }
+  .panel-foot .btn.ghost { background: #fdfcf7; color: #2a2a2a; border: 1px solid #e5dfd0; }
+  .panel-foot .btn.ghost:hover { background: #ececec; }
 
   .list-header {
     display: flex; justify-content: space-between; align-items: baseline;
@@ -153,9 +125,30 @@
   }
   .quote .text {
     font-size: 15px; line-height: 1.6; margin-bottom: 8px;
-    white-space: pre-wrap; word-break: break-word; color: #1f1f1f;
-    padding-right: 36px;  /* 只给常显的 ☆ 让位；复制/× hover 时浮层覆盖，不占正文宽度 */
+    word-break: break-word; color: #1f1f1f;
   }
+  /* Markdown 渲染元素（列表卡片 .text 与编辑预览 .md-preview 共用 .md-body）*/
+  .md-body strong { font-weight: 700; }
+  .md-body em { font-style: italic; }
+  .md-body ul, .md-body ol { margin: 4px 0; padding-left: 22px; }
+  .md-body li { margin: 2px 0; }
+  .md-body blockquote { margin: 4px 0; padding: 2px 0 2px 10px; border-left: 3px solid #e0d8c0; color: #777; }
+  .md-body h3, .md-body h4, .md-body h5 { font-size: 15px; margin: 4px 0; font-weight: 700; }
+  .md-body p { margin: 0 0 4px; }
+  .md-body p:last-child { margin-bottom: 0; }
+  /* Toast UI 编辑器容器适配金句 app 奶油风 */
+  #tuiEditor { margin-top: 2px; }
+  /* 正文编辑器撑满抽屉剩余高度（自适应屏幕，不靠固定值）*/
+  .fld-grow { flex: 1; min-height: 0; }
+  .fld-grow #tuiEditor { flex: 1; min-height: 0; display: flex; }
+  .fld-grow .vditor { height: 100% !important; width: 100%; display: flex; flex-direction: column; }
+  .fld-grow .vditor-content { flex: 1; min-height: 0; }
+  /* Vditor IR 编辑器融入金句 app 奶油风 */
+  .vditor { border: 1px solid #e5dfd0 !important; border-radius: 10px !important; }
+  .vditor-toolbar { background: #fdfcf7 !important; border-bottom: 1px solid #efe9d8 !important; border-radius: 10px 10px 0 0 !important; }
+  .vditor-reset { font-size: 15px !important; font-family: inherit !important; color: #1f1f1f !important; }
+  .vditor-ir pre.vditor-reset, .vditor-content { background: #fff !important; }
+  .vditor-reset blockquote { border-left-color: #e0d8c0 !important; color: #777 !important; }
   .quote .meta {
     font-size: 12px; color: #999;
     display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
@@ -166,33 +159,27 @@
     padding: 1px 8px; border-radius: 3px; font-size: 11px; cursor: pointer;
   }
   .quote .meta .uc:hover { background: #dcebff; }
-  /* 右上角动作区：收藏☆ 常显占位；复制/× hover 时浮层覆盖（带奶油白底挡住底下文字），不挤压正文 */
+  /* 动作区：放卡片底部 meta 行最右（不挡正文）。☆ 常显；✎/复制/× hover 卡片时淡入 */
   .quote .actions {
-    position: absolute; top: 6px; right: 8px;
-    display: flex; align-items: center; gap: 2px;
+    margin-left: auto; display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0;
   }
   .quote .actions button {
-    background: transparent; border: none; cursor: pointer;
-    font-size: 13px; padding: 3px 6px; border-radius: 4px; color: #999;
+    background: transparent; border: none; cursor: pointer; white-space: nowrap; line-height: 1;
+    font-size: 13px; padding: 2px 6px; border-radius: 4px; color: #999;
   }
   .quote .actions button:hover { background: #f0ece0; }
-  .quote .actions .copy:hover { color: #1f6feb; }
-  .quote .actions .edit:hover { color: #218838; }
+  .quote .actions .edit:hover, .quote .actions .copy:hover { color: #1f6feb; }
   .quote .actions .del:hover { color: #c00; }
-  /* 复制/编辑/删除：默认完全不占位（absolute 抽离 + 隐藏）；hover 时浮出，停在 ☆ 左侧，带半透明奶油白底盖住文字 */
-  .quote .actions .copy, .quote .actions .edit, .quote .actions .del {
-    position: absolute; top: 0; opacity: 0; pointer-events: none;
-    transition: opacity 0.12s; background: rgba(255,254,251,0.95);
-    box-shadow: -6px 0 6px rgba(255,254,251,0.95);
+  /* ✎/复制/×：平时透明不喧宾夺主，hover 卡片时淡入（占位固定，布局不跳）*/
+  .quote .actions .edit, .quote .actions .copy, .quote .actions .del {
+    opacity: 0; pointer-events: none; transition: opacity .12s;
   }
-  .quote .actions .del { right: 30px; }   /* ☆ 宽约 30px，× 紧贴其左 */
-  .quote .actions .edit { right: 56px; }  /* 编辑 在 × 左侧 */
-  .quote .actions .copy { right: 92px; }  /* 复制 在 编辑 左侧（编辑两字约宽 36px）*/
-  .quote:hover .actions .copy, .quote:hover .actions .edit, .quote:hover .actions .del { opacity: 1; pointer-events: auto; }
+  .quote:hover .actions .edit, .quote:hover .actions .copy, .quote:hover .actions .del {
+    opacity: 1; pointer-events: auto;
+  }
   /* 收藏星：常显（置顶/未置顶不同色），永远在最右，点击切换 */
   .quote .actions .star {
-    font-size: 15px; padding: 2px 5px; line-height: 1;
-    color: #d8d0bb;
+    font-size: 15px; padding: 2px 4px; line-height: 1; color: #d8d0bb;
   }
   .quote .actions .star.on { color: #e0b341; }
   .quote .actions .star:hover { color: #e0b341; }
@@ -234,6 +221,7 @@
   }
   .newbar:hover { background: rgba(31,111,235,0.14); }
 </style>
+<link rel="stylesheet" href="/vendor/vditor/dist/index.css">
 </head>
 <body>
 
@@ -243,8 +231,35 @@
     <span class="sub">· <span class="total" id="total">- 条</span></span>
     <span class="spacer"></span>
     <button class="sync-btn" id="sync-btn" onclick="syncNow()" title="手动同步到 GitHub">⟳ 同步</button>
-    <button class="add-pill" onclick="toggleAdd()"><span>＋</span> 新金句</button>
+    <button class="add-pill" onclick="openPanel(null)"><span>＋</span> 新金句</button>
   </div>
+
+  <!-- 新增/编辑面板（右侧滑出，对齐选题库；新增/编辑共用，靠 editingId 区分）-->
+  <div class="panel-mask" id="panelMask"></div>
+  <aside class="panel" id="panel">
+    <div class="panel-head">
+      <h2 id="panelTitle">新金句</h2>
+      <button class="x" id="panelClose" title="关闭">✕</button>
+    </div>
+    <div class="panel-body">
+      <div class="fld fld-grow">
+        <label>金句正文 <span class="hint">（打 1. 或 - 空格自动列表）</span></label>
+        <div id="tuiEditor"></div>
+      </div>
+      <div class="fld">
+        <label>来源 <span class="hint">（书名 / 人名 / 场景，可选）</span></label>
+        <input id="source" type="text" placeholder="来源" autocomplete="off" />
+      </div>
+      <div class="fld">
+        <label>用途标签 <span class="hint">（可不选）</span></label>
+        <div class="uc-picker" id="uc-picker"><!-- 五个标签点选，JS 渲染 --></div>
+      </div>
+    </div>
+    <div class="panel-foot">
+      <button class="btn ghost" id="panelCancel">取消</button>
+      <button class="btn save" id="saveBtn" onclick="submitQuote()">添加</button>
+    </div>
+  </aside>
 
   <div class="search-box">
     <input id="search" type="text" placeholder="搜金句正文 / 来源 / 用途…（直接打字）" autofocus />
@@ -266,25 +281,6 @@
   <div id="end" class="end" style="display:none">— 到底了 —</div>
 </div></div><!-- /list-scroll -->
 
-<!-- 新金句 / 编辑抽屉（右侧滑出；新增与编辑复用同一抽屉，靠 state.editingId 区分）-->
-<div class="panel-mask" id="panel-mask" onclick="cancelEdit()"></div>
-<aside class="panel" id="add-pop">
-  <div class="panel-head">
-    <h2 id="panel-title">添加金句</h2>
-    <button class="x" id="panel-close" onclick="cancelEdit()" title="关闭">✕</button>
-  </div>
-  <div class="panel-body">
-    <textarea id="text" placeholder="金句正文…"></textarea>
-    <input class="source-input" id="source" type="text" placeholder="来源（书名 / 人名 / 场景，可选）" />
-    <div class="uc-picker" id="uc-picker"><!-- 五个标签点选，JS 渲染 --></div>
-  </div>
-  <div class="panel-foot">
-    <span class="hint" id="add-hint">⌘ + ↵ 快捷添加 · 标签可不选</span>
-    <button class="cancel" id="cancel-edit" onclick="cancelEdit()" style="display:none">取消</button>
-    <button class="save" id="save-btn" onclick="submitQuote()">添加</button>
-  </div>
-</aside>
-
 <div class="toast" id="toast"><span id="toastText"></span><div class="toast-bar-wrap" id="toastBarWrap"><div class="toast-bar" id="toastBar"></div></div></div>
 
 <!-- 更新横幅（发现新版本时滑出）-->
@@ -295,6 +291,7 @@
   <button class="ub-btn ub-dismiss" id="updateDismiss">忽略</button>
 </div>
 
+<script src="/vendor/vditor/dist/index.min.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const PAGE_SIZE = 30;
@@ -306,9 +303,9 @@ const UNTAGGED = '未分类';  // 伪 chip，筛 use_case 为空的历史/未打
 const state = {
   query: '',        // 搜索框文字
   chip: '',         // 选中的 use_case chip（空 = 全部）
-  newUseCase: '',   // 新增/编辑框当前选中的标签（空 = 未选）
-  editingId: null,           // 非 null = 编辑态（弹层在编辑此条），null = 新增态
-  editingBaseUpdatedAt: null, // 编辑时读到的 updated_at，提交做 CAS 防 stale write
+  newUseCase: '',   // 新增框当前选中的标签（空 = 未选）
+  editingId: null,  // 编辑态：非空 = 正在编辑该 id（提交走 PATCH 而非 add）
+  editingBaseUpdatedAt: null,  // 编辑时记录的 updated_at，提交做 CAS 防 stale write（对齐远端字段级 LWW 数据层）
   offset: 0, total: 0, loaded: 0, loading: false, done: false,
 };
 
@@ -337,21 +334,71 @@ function escapeHtml(s) {
   }[c]));
 }
 
+// ===== 基础 Markdown 渲染（自写无依赖：加粗/斜体/列表/引用/标题）=====
+// 先整体转义防 XSS，再在转义后文本上套 MD 标记（标记字符不受转义影响）
+function renderMarkdown(src) {
+  const inline = (t) => t
+    .replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>')
+    .replace(/(^|[^_])_([^_\n]+?)_(?!_)/g, '$1<em>$2</em>');
+  const lines = escapeHtml(src).split('\n');
+  let html = '', i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const m = line.match(/^(#{1,3})\s+(.*)$/);
+    if (m) { const lv = m[1].length + 2; html += `<h${lv}>${inline(m[2])}</h${lv}>`; i++; continue; }
+    if (/^&gt;\s?/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^&gt;\s?/.test(lines[i])) { buf.push(inline(lines[i].replace(/^&gt;\s?/, ''))); i++; }
+      html += `<blockquote>${buf.join('<br>')}</blockquote>`; continue;
+    }
+    if (/^[-*]\s+/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^[-*]\s+/.test(lines[i])) { buf.push(`<li>${inline(lines[i].replace(/^[-*]\s+/, ''))}</li>`); i++; }
+      html += `<ul>${buf.join('')}</ul>`; continue;
+    }
+    if (/^\d+\.\s+/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i])) { buf.push(`<li>${inline(lines[i].replace(/^\d+\.\s+/, ''))}</li>`); i++; }
+      html += `<ol>${buf.join('')}</ol>`; continue;
+    }
+    if (line.trim() === '') { i++; continue; }
+    const buf = [];
+    while (i < lines.length && lines[i].trim() !== '' && !/^(#{1,3}\s|&gt;\s?|[-*]\s|\d+\.\s)/.test(lines[i])) {
+      buf.push(inline(lines[i])); i++;
+    }
+    html += `<p>${buf.join('<br>')}</p>`;
+  }
+  return html;
+}
+// 复制用：MD 源码 → 干净纯文本（去标记，无序列表转 •，保留有序数字）
+function mdToPlain(src) {
+  return (src || '')
+    .replace(/^#{1,3}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/^[-*]\s+/gm, '• ')
+    .replace(/\*\*([^*\n]+?)\*\*/g, '$1')
+    .replace(/\*([^*\n]+?)\*/g, '$1')
+    .replace(/_([^_\n]+?)_/g, '$1');
+}
+// （旧 textarea 时代的 mdWrap/mdLinePrefix/updatePreview 已随 Toast UI 接入移除；
+//   renderMarkdown 仍用于列表卡片渲染，mdToPlain 仍用于复制纯文本）
+
 function renderQuote(q) {
   const pinned = !!q.pinned;
   return `
     <div class="quote ${pinned ? 'pinned' : ''}" data-id="${q.id}">
-      <div class="text">${escapeHtml(q.text)}</div>
+      <div class="text md-body">${renderMarkdown(q.text)}</div>
       <div class="meta">
         ${q.source ? `<span class="src">— ${escapeHtml(q.source)}</span>` : ''}
         ${q.use_case ? `<span class="uc" onclick="filterByChip('${escapeHtml(q.use_case)}')">${escapeHtml(q.use_case)}</span>` : ''}
         <span>${fmtDate(q.created_at)}</span>
-      </div>
-      <div class="actions">
-        <button class="star ${pinned ? 'on' : ''}" onclick="togglePin('${q.id}', ${pinned})" title="${pinned ? '取消置顶' : '置顶'}">${pinned ? '★' : '☆'}</button>
-        <button class="copy" onclick="copyQuote('${q.id}')" title="复制正文">复制</button>
-        <button class="edit" onclick="editQuote('${q.id}')" title="编辑">编辑</button>
-        <button class="del" onclick="delQuote('${q.id}')" title="删除">×</button>
+        <span class="actions">
+          <button class="edit" onclick="openPanel('${q.id}')" title="编辑">✎</button>
+          <button class="copy" onclick="copyQuote('${q.id}')" title="复制正文">复制</button>
+          <button class="del" onclick="delQuote('${q.id}')" title="删除">×</button>
+          <button class="star ${pinned ? 'on' : ''}" onclick="togglePin('${q.id}', ${pinned})" title="${pinned ? '取消置顶' : '置顶'}">${pinned ? '★' : '☆'}</button>
+        </span>
       </div>
     </div>
   `;
@@ -364,7 +411,7 @@ function updateHeader() {
   $('list-count').textContent = `已显示 ${state.loaded} / ${state.total} 条`;
 }
 
-// 缓存整条金句（id→{text,source,use_case,updated_at,...}），供复制 + 编辑预填
+// 缓存当前完整记录，供复制正文 + 编辑预填（避免 DOM 转义往返 / 额外请求）
 const _quoteCache = {};
 
 async function loadFirstPage() {
@@ -467,7 +514,7 @@ function filterByChip(uc) {
 
 // ===== 复制 =====
 async function copyQuote(id) {
-  const text = (_quoteCache[id] && _quoteCache[id].text) || '';
+  const text = mdToPlain((_quoteCache[id] || {}).text || '');
   try {
     await navigator.clipboard.writeText(text);
     toast('已复制');
@@ -507,80 +554,67 @@ function pickUseCase(uc) {
   state.newUseCase = (state.newUseCase === uc) ? '' : uc;
   renderUcPicker();
 }
-// 抽屉切「新增态」UI（标题/按钮/取消键）
-function setAddMode() {
-  state.editingId = null; state.editingBaseUpdatedAt = null;
-  $('panel-title').textContent = '添加金句';
-  $('save-btn').textContent = '添加';
-  $('cancel-edit').style.display = 'none';
-  $('add-hint').textContent = '⌘ + ↵ 快捷添加 · 标签可不选';
-}
-// 抽屉切「编辑态」UI
-function setEditMode() {
-  $('panel-title').textContent = '编辑金句';
-  $('save-btn').textContent = '保存编辑';
-  $('cancel-edit').style.display = '';
-  $('add-hint').textContent = '⌘ + ↵ 保存 · 编辑同一条';
-}
-
-// 抽屉开/关：panel 与 mask 同步 .show（右侧滑出范式）
-function openPanel() {
-  $('add-pop').classList.add('show');
-  $('panel-mask').classList.add('show');
-}
-function closePanel() {
-  $('add-pop').classList.remove('show');
-  $('panel-mask').classList.remove('show');
-}
-
-function toggleAdd() {
-  const pop = $('add-pop');
-  // 已展开 → 收起（复位成新增态，避免残留编辑态）；已收起 → 以新增态打开
-  if (pop.classList.contains('show')) {
-    closePanel();
-    setAddMode();
+// Vditor IR 即时渲染编辑器（Typora 式：打 1./- 空格自动列表；getValue 取纯文本 MD 存库，同步架构不变）
+// Vditor 是异步初始化（after 回调才 ready），用 vditorReady + __pending 处理首次设值时机
+let vditor = null, vditorReady = false;
+function ensureEditor(initialValue) {
+  const val = initialValue || '';
+  if (vditor) {
+    if (vditorReady) vditor.setValue(val);
+    else vditor.__pending = val;   // 还在 init，先存着，after 里设
     return;
   }
-  // 打开即视为新增态（编辑走 editQuote 单独入口）
-  $('text').value = ''; $('source').value = ''; state.newUseCase = '';
-  setAddMode();
+  vditor = new Vditor('tuiEditor', {
+    mode: 'ir',
+    cdn: location.origin + '/vendor/vditor',
+    height: '100%',
+    minHeight: 300,
+    placeholder: '金句正文…（打 1. 或 - 再空格，自动列表；# 标题，> 引用）',
+    toolbar: ['headings', 'bold', 'italic', 'strike', '|', 'list', 'ordered-list', 'check', 'quote', 'line', '|', 'undo', 'redo'],
+    cache: { enable: false },
+    counter: { enable: false },
+    after: () => {
+      vditorReady = true;
+      vditor.setValue(vditor.__pending != null ? vditor.__pending : val);
+      vditor.__pending = null;
+    },
+  });
+}
+// openPanel(null) = 新增；openPanel(id) = 编辑。新增/编辑共用同一右侧面板。
+function openPanel(id) {
+  const isNew = id == null;
+  const q = isNew ? null : _quoteCache[id];
+  if (!isNew && !q) { toast('数据未就绪，刷新后再试'); return; }
+  state.editingId = isNew ? null : id;
+  state.editingBaseUpdatedAt = q ? (q.updated_at || q.created_at || null) : null;  // CAS 基准
+  state.newUseCase = q ? (q.use_case || '').trim() : '';
+  $('panelTitle').textContent = isNew ? '新金句' : '编辑金句';
+  $('source').value = q ? (q.source || '') : '';
+  $('saveBtn').textContent = isNew ? '添加' : '保存修改';
   renderUcPicker();
-  openPanel();
-  $('text').focus();
+  $('panel').classList.add('show');
+  $('panelMask').classList.add('show');
+  ensureEditor(q ? (q.text || '') : '');
+  setTimeout(() => { try { vditor && vditor.focus(); } catch (e) {} }, 250);
+}
+function closePanel() {
+  $('panel').classList.remove('show');
+  $('panelMask').classList.remove('show');
+  state.editingId = null;
+  state.editingBaseUpdatedAt = null;
+  state.newUseCase = '';
+  if (vditor && vditorReady) vditor.setValue('');
+  $('source').value = '';
 }
 
-// 进入编辑态：预填该条、记录 base updated_at 做 CAS、暂停轮询打断
-function editQuote(id) {
-  const q = _quoteCache[id];
-  if (!q) { toast('该条未加载，刷新后重试'); return; }
-  state.editingId = id;
-  state.editingBaseUpdatedAt = q.updated_at || q.created_at || null;  // 历史无 updated_at → 用 created_at
-  state.newUseCase = (q.use_case || '').trim();
-  $('text').value = q.text || '';
-  $('source').value = q.source || '';
-  setEditMode();
-  renderUcPicker();
-  openPanel();
-  $('text').focus();
-}
-
-function cancelEdit() {
-  $('text').value = ''; $('source').value = '';
-  closePanel();
-  setAddMode();
-}
-
-// 统一提交入口：editingId 有值走编辑 PATCH，否则走新增 POST
+// 提交按钮统一入口：编辑态走 PATCH，否则走新增。成功后关闭抽屉。
 async function submitQuote() {
-  if (state.editingId) return saveEdit();
-  return addQuote();
-}
-
-async function addQuote() {
-  const text = $('text').value.trim();
-  if (!text) { toast('金句正文不能空'); $('text').focus(); return; }
+  const text = (vditor && vditorReady ? vditor.getValue() : '').trim();
+  if (!text) { toast('金句正文不能空'); vditor && vditor.focus(); return; }
   const source = $('source').value.trim();
   const use_case = state.newUseCase;   // 选中的标签（可空）
+  if (state.editingId) { saveEdit(state.editingId, text, source, use_case); return; }
+  // —— 新增 ——
   try {
     const resp = await fetch('/quotes/add', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -588,41 +622,34 @@ async function addQuote() {
     });
     const data = await resp.json();
     if (data.ok) {
-      $('text').value = ''; $('source').value = ''; state.newUseCase = '';
       toast(`已存入 #${data.total}`);
       $('search').value = ''; state.query = ''; state.chip = '';
-      closePanel();   // 加完收起，列表最大化
+      closePanel();            // 关抽屉 + 清空 + 复位 editingId
       buildChips();
       loadFirstPage();
     } else toast('添加失败：' + (data.error || '未知'));
   } catch (e) { toast('网络错误：' + e.message); }
 }
 
-// 保存编辑：带 expected_updated_at 做 CAS；409 = 另一端已改过 → 提示重载
-async function saveEdit() {
-  const id = state.editingId;
-  const text = $('text').value.trim();
-  if (!text) { toast('金句正文不能空'); $('text').focus(); return; }
-  const source = $('source').value.trim();
-  const use_case = state.newUseCase;
+// 编辑保存：原地改正文，后端走 updated_at 字段级 LWW；带 expected_updated_at 做 CAS
+// 409 = 另一台设备已改过这条 → 提示重载，避免覆盖对方的修改（对齐远端数据层）
+async function saveEdit(id, text, source, use_case) {
   try {
     const resp = await fetch(`/quotes/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text, source, use_case,
-        expected_updated_at: state.editingBaseUpdatedAt,
-      }),
+      body: JSON.stringify({ text, source, use_case, expected_updated_at: state.editingBaseUpdatedAt }),
     });
     if (resp.status === 409) {
-      toast('这条已被另一端改过，正在重载…');
-      cancelEdit(); buildChips(); loadFirstPage();
+      toast('这条已在另一台设备改过，已帮你刷新，请重新编辑');
+      closePanel(); buildChips(); loadFirstPage();
       return;
     }
     const data = await resp.json();
     if (data.ok) {
-      cancelEdit();
-      toast('已保存');
-      buildChips(); loadFirstPage();
+      toast('已保存修改');
+      closePanel();
+      buildChips();
+      loadFirstPage();
     } else toast('保存失败：' + (data.error || '未知'));
   } catch (e) { toast('网络错误：' + e.message); }
 }
@@ -666,12 +693,14 @@ $('search').addEventListener('input', () => {
 $('search').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { clearTimeout(searchTimer); doSearch(); }
 });
-$('text').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitQuote();
-});
-// Esc 关抽屉（仅当抽屉展开时）
+// 面板：✕ / 取消 / 点遮罩 / ESC 关闭；Cmd/Ctrl+Enter 保存（仅面板打开时）
+$('panelClose').addEventListener('click', closePanel);
+$('panelCancel').addEventListener('click', closePanel);
+$('panelMask').addEventListener('click', closePanel);
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && $('add-pop').classList.contains('show')) cancelEdit();
+  if (!$('panel').classList.contains('show')) return;
+  if (e.key === 'Escape') closePanel();
+  else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitQuote(); }
 });
 
 // 列表到底自动加载
@@ -786,8 +815,6 @@ function applyNewQuotes() {
   loadFirstPage();
 }
 async function pollForChanges() {
-  // 编辑态时跳过：避免 applyNewQuotes 重渲染丢掉编辑弹层 + 防 stale write 窗口被搅动
-  if (state.editingId) return;
   // 用户正在输入搜索框 / 新增框时跳过，避免打断
   if (document.activeElement === $('search') || document.activeElement === $('text')
       || document.activeElement === $('source') || document.activeElement === $('use_case')) return;

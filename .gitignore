@@ -1,8 +1,8 @@
 # quotes-app 代码仓 .gitignore —— 追踪源码 + 脚本 + 文档，排除产物/备份/密钥
 
-# py2app 产物（28M，走 GitHub Release 不进 git）
-build/
-dist/
+# py2app 产物（28M，走 GitHub Release 不进 git）；锚根目录，别误伤 vendor/vditor/dist
+/build/
+/dist/
 
 # 备份 + 旧 iCloud 同步交换日志（数据侧的东西，不进代码仓）
 _backups/
@@ -31,7 +31,7 @@ quotes.json
 .gh-token
 .update/
 venv/
-build/
-dist/
+/build/
+/dist/
 _backups/
 __pycache__/
