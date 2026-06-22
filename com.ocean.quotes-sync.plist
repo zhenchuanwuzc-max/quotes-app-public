@@ -3,32 +3,27 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.example.quotes-app</string>
+    <string>com.ocean.quotes-sync</string>
 
     <key>ProgramArguments</key>
     <array>
-        <string>__START_SH__</string>
+        <string>__SYNC_RUN__</string>
     </array>
 
     <key>RunAtLoad</key>
     <true/>
 
-    <key>KeepAlive</key>
-    <dict>
-        <key>SuccessfulExit</key>
-        <false/>
-    </dict>
+    <key>StartInterval</key>
+    <integer>600</integer>
 
     <key>StandardOutPath</key>
-    <string>__LOG_OUT__</string>
+    <string>__SYNC_LOG__</string>
 
     <key>StandardErrorPath</key>
-    <string>__LOG_ERR__</string>
+    <string>__SYNC_LOG__</string>
 
     <key>EnvironmentVariables</key>
     <dict>
-        <key>QUOTES_PORT</key>
-        <string>__PORT__</string>
         <key>LANG</key>
         <string>en_US.UTF-8</string>
         <key>LC_ALL</key>

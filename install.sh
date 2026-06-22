@@ -12,8 +12,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LABEL="com.example.quotes-app"
-PLIST_SRC="$SCRIPT_DIR/com.example.quotes-app.plist"
+LABEL="com.ocean.quotes-app"
+PLIST_SRC="$SCRIPT_DIR/com.ocean.quotes-app.plist"
 PLIST_DST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_OUT="$HOME/Library/Logs/quotes-app.out.log"
 LOG_ERR="$HOME/Library/Logs/quotes-app.err.log"
@@ -141,8 +141,8 @@ echo "✅ server launchd loaded"
 # ─────────────────────────────────────────────
 # 5. 同步 cron（每 10 分钟跑 ~/quotes/sync.sh，本地文件无需 brctl wrapper）
 # ─────────────────────────────────────────────
-SYNC_LABEL="com.example.quotes-sync"
-SYNC_PLIST_SRC="$SCRIPT_DIR/com.example.quotes-sync.plist"
+SYNC_LABEL="com.ocean.quotes-sync"
+SYNC_PLIST_SRC="$SCRIPT_DIR/com.ocean.quotes-sync.plist"
 SYNC_PLIST_DST="$HOME/Library/LaunchAgents/$SYNC_LABEL.plist"
 SYNC_LOG="$HOME/Library/Logs/quotes-sync.log"
 if [ -f "$SYNC_PLIST_SRC" ]; then

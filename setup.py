@@ -37,7 +37,7 @@ OPTIONS = {
     "plist": {
         "CFBundleName": "quotes",
         "CFBundleDisplayName": "quotes",
-        "CFBundleIdentifier": "com.example.quotes-app",
+        "CFBundleIdentifier": "com.ocean.quotes-app",
         "CFBundleVersion": VERSION,
         "CFBundleShortVersionString": VERSION,
         "NSHighResolutionCapable": True,
