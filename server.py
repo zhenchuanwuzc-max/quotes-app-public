@@ -11,7 +11,7 @@ quotes-app 本地 HTTP 服务（v0.1.0：JSON-as-truth + git 同步，弃 SQLite
 - POST   /sync-now      → 手动触发 git 同步，回 sync.sh 写的状态
 - GET    /health        → {ok, total}
 
-数据：~/quotes/quotes.json（单 JSON 对象，本地真库，git 仓根；不进 iCloud）
+数据：~/quotes-data/quotes.json（单 JSON 对象，本地真库，git 仓根；不进 iCloud）
   格式：{"updated": ISO, "quotes": [{id,text,source,use_case,created_at,updated_at,pinned,pinned_at}]}
   可变字段（推翻原 append-only 设计）：
     - 正文原子组 {text,source,use_case,updated_at}：编辑走 updated_at LWW（整组覆盖，禁逐字段拼）

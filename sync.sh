@@ -5,7 +5,7 @@
 # - 全程写 /tmp/quotes-sync.log；最终状态写 /tmp/quotes-sync.status（供 /sync-now 读）
 # 失败不阻塞 App
 #
-# 注意：本脚本运行在 ~/quotes/（数据 git 仓根），不是 iCloud 代码目录。
+# 注意：本脚本运行在 ~/quotes-data/（数据 git 仓根），不是 iCloud 代码目录。
 set -e
 cd "$(dirname "$0")" || exit 0
 

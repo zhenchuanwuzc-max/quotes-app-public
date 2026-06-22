@@ -5,7 +5,7 @@
 #   - 数据 + sync.sh + json-merge.py 在 ~/quotes-data/（git 私有数据仓），不再走 iCloud _sync 中转
 #   - 代码在 ~/quotes-app/（本脚本所在处），数据在 ~/quotes-data/，server 用 QUOTES_DATA_DIR env 连接
 #   - 新机自动 git clone 数据仓（SSH 不通则用 .gh-token 切 HTTPS）
-#   - 同步 cron 直接跑 ~/quotes/sync.sh（本地文件，无需 run_sync.sh brctl wrapper）
+#   - 同步 cron 直接跑 ~/quotes-data/sync.sh（本地文件，无需 run_sync.sh brctl wrapper）
 #
 # 设计：代码与数据拆两仓（plan-reviewer 三盲共识）。本脚本是代码侧的 bootstrap。
 
@@ -49,7 +49,7 @@ fi
 echo "✅ 端口选定：$PORT"
 
 # ─────────────────────────────────────────────
-# 2. 数据仓 bootstrap：~/quotes/ 是 git 仓吗？
+# 2. 数据仓 bootstrap：~/quotes-data/ 是 git 仓吗？
 #    - 已是 git 仓 → pull 最新
 #    - 不是但有数据 → git init + 关联远端（首台机/迁移）
 #    - 啥都没有 → git clone（新机）
@@ -139,7 +139,7 @@ launchctl load "$PLIST_DST"
 echo "✅ server launchd loaded"
 
 # ─────────────────────────────────────────────
-# 5. 同步 cron（每 10 分钟跑 ~/quotes/sync.sh，本地文件无需 brctl wrapper）
+# 5. 同步 cron（每 10 分钟跑 ~/quotes-data/sync.sh，本地文件无需 brctl wrapper）
 # ─────────────────────────────────────────────
 SYNC_LABEL="com.ocean.quotes-sync"
 SYNC_PLIST_SRC="$SCRIPT_DIR/com.ocean.quotes-sync.plist"
