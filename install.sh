@@ -177,7 +177,6 @@ for i in 1 2 3 4 5; do
         echo "  数据：$DATA_FILE  ($TOTAL 条)"
         echo "  git：$(cd "$DATA_DIR" && git remote get-url origin 2>/dev/null | sed 's/:[^@]*@/:***@/' || echo '未配远端')"
         echo "  备份：$BACKUP_DIR"
-        echo "  卸载：bash $SCRIPT_DIR/uninstall.sh"
         echo "════════════════════════════════════════════"
         exit 0
     fi
