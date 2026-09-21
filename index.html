@@ -160,7 +160,13 @@ html[data-theme="red"] .chip-filter{color:var(--fg)}
 .rq p{margin:0}
 .rq p+p{margin-top:.5em}
 .rq p.hang{text-indent:-.42em}
-.more{flex:none;font-size:11px;letter-spacing:0;color:var(--mute);white-space:nowrap;font-variant-numeric:tabular-nums}
+/* 后文：灰字顺排在首句后面。首句一行放得下 → 整行只占一行（.one）；首句自己就折行 → 保持两行 */
+/* 行尾省略号取容器的颜色与字重，所以容器本身设成灰/常规，首句再单独提回黑/中粗 —— 省略号才会和后文一样是灰的 */
+.rq:not(.full){color:rgba(18,18,18,.4);font-weight:400}
+.rq:not(.full) .lead{color:var(--ink);font-weight:500}
+.rq.hl:not(.full) .lead{color:inherit}
+.rq .rest{margin-left:.5em}
+.rq.one{-webkit-line-clamp:1;line-clamp:1}
 /* hover 时正文右侧的复制提示 */
 /* 命中：加粗；非命中降中灰（红只留给置顶） */
 mark{background:none;color:var(--ink);font-weight:700}
@@ -609,14 +615,14 @@ function pblock(t){
   return '<p'+(isOpen(t)?' class="hang"':'')+'>'+inline(t).replace(/\n/g,'<br>')+'</p>';
 }
 
-/* 目录：只取首句/首段，其余以「+N 行」提示 */
+/* 目录：首句黑字 + 后文灰字顺排，行尾省略；不再用「+N 行」计数 */
 var SENT_FULL='。！？；…';
 var SENT_HALF='.!?;';
 var TAIL='。！？；…”」』）】〕!?;.';
 function firstSeg(text){
   var lines=String(text).replace(/\r\n/g,'\n').split('\n')
     .map(function(s){ return s.trim(); }).filter(Boolean);
-  if(!lines.length) return { s:'', more:0 };
+  if(!lines.length) return { s:'', rest:'' };
   var L0=lines[0], cut=-1, i, c;
   for(i=0;i<L0.length;i++){
     c=L0.charAt(i);
@@ -630,7 +636,16 @@ function firstSeg(text){
     s=L0.slice(0,e+1);
     if(L0.slice(e+1).trim()) extra=1;
   }
-  return { s:s, more:(lines.length-1)+extra };
+  /* 后文 = 首行剩余 + 其余各行；行尾没有标点的，拼接处补一个空格，避免两行粘成一句 */
+  var parts=[], tail=(cut>=0? L0.slice(s.length).trim() : '');
+  if(tail) parts.push(tail);
+  for(i=1;i<lines.length;i++) parts.push(lines[i]);
+  var rest='';
+  for(i=0;i<parts.length;i++){
+    if(rest && TAIL.indexOf(rest.charAt(rest.length-1))<0 && '，、：,:'.indexOf(rest.charAt(rest.length-1))<0) rest+=' ';
+    rest+=parts[i];
+  }
+  return { s:s, rest:rest };
 }
 
 /* 海报：展示标题去掉末尾的分号/冒号/逗号（复制仍走原文） */
@@ -1072,16 +1087,12 @@ function renderList(){
     }else{
       seg=firstSeg(q.plain);
       rq.className='rq'+(isOpen(seg.s)?' hang':'');
-      rq.innerHTML=inline(seg.s);
+      rq.innerHTML='<span class="lead">'+inline(seg.s)+'</span>'
+                  +(seg.rest? '<span class="rest">'+inline(seg.rest)+'</span>' : '');
     }
     typeset(rq,{gap:true});
     if(hilite(rq,s)) rq.classList.add('hl');
     rb.appendChild(rq);
-    if(seg && seg.more>0){
-      var mo=document.createElement('span');
-      mo.className='more'; mo.textContent='+'+seg.more+' 行';
-      rb.appendChild(mo);
-    }
 
     var rm=document.createElement('div');
     rm.className='rmeta';
@@ -1108,6 +1119,19 @@ function renderList(){
   });
   listEl.appendChild(frag);
   alignSearch();
+  fitLeads();
+}
+/* 首句一行放得下 → 该条只占一行（后文灰字在行尾省略）；首句自己就折行 → 保持两行。
+   先统一按两行排、批量读首句的行数，再批量写 class，避免读写交错反复触发布局 */
+function fitLeads(){
+  var rqs=listEl.querySelectorAll('.rq:not(.full)'), i, wraps=[];
+  for(i=0;i<rqs.length;i++) rqs[i].classList.remove('one');
+  for(i=0;i<rqs.length;i++){
+    var lead=rqs[i].querySelector('.lead'), tops={}, n=0, r, k;
+    if(lead){ r=lead.getClientRects(); for(k=0;k<r.length;k++){ var t=Math.round(r[k].top); if(!tops[t]){ tops[t]=1; n++; } } }
+    wraps.push(n>1);
+  }
+  for(i=0;i<rqs.length;i++) if(!wraps[i]) rqs[i].classList.add('one');
 }
 /* 搜索框左缘 = 金句正文列左缘 */
 function alignSearch(){
@@ -2027,7 +2051,7 @@ window.addEventListener('resize', function(){
   clearTimeout(rt);
   rt=setTimeout(function(){
     if(state.view==='poster') fitQuote();
-    else alignSearch();
+    else { alignSearch(); fitLeads(); }
   },90);
 });
 if(document.fonts && document.fonts.ready){
