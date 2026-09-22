@@ -385,6 +385,7 @@ html[data-theme="red"] #qt code{box-shadow:inset 0 -.28em 0 rgba(255,255,255,.28
   border-bottom:1px solid transparent;transition:color .15s ease;
 }
 .tbtn:hover{color:var(--fg)}
+.tbtn[disabled]{opacity:.5;cursor:default}
 
 /* 列表空/加载/失败：一条安静的灰字 */
 .istate{
@@ -470,6 +471,7 @@ html[data-theme="red"] #qt code{box-shadow:inset 0 -.28em 0 rgba(255,255,255,.28
     <button class="pin-toggle" id="btnPin" type="button" aria-pressed="false">置顶</button>
     <button class="tbtn" id="btnEdit" type="button">编辑</button>
     <button class="tbtn" id="btnDel" type="button">删除</button>
+    <button class="tbtn" id="btnWall" type="button" title="把这一屏做成桌面壁纸">壁纸</button>
     <button class="btn-copy" id="btnCopy" type="button">复制</button>
   </footer>
 </div>
@@ -503,6 +505,7 @@ html[data-theme="red"] #qt code{box-shadow:inset 0 -.28em 0 rgba(255,255,255,.28
     <div class="hrow"><span>置顶</span><b>P</b></div>
     <div class="hrow"><span>复制</span><b>C</b></div>
     <div class="hrow"><span>编辑</span><b>E</b></div>
+    <div class="hrow"><span>设为壁纸（海报里）</span><b>W</b></div>
     <div class="hrow"><span>返回 / 关闭</span><b>Esc</b></div>
     <div class="hrow"><span>本面板</span><b>?</b></div>
   </div>
@@ -1483,6 +1486,98 @@ function copyRow(i){
   copyText(q.plain, function(){ flashCopied(row); });
 }
 var pcT;
+/* ================= 壁纸 =================
+   把当前海报画到 canvas（按所在屏幕的物理像素），POST 给 server 落盘并设为桌面。
+   所见即所得：置顶 = 红底白字，未置顶 = 纸底黑字；大字用的正是海报已经断好的行。 */
+function wrapText(x,text,maxw){
+  /* 中文逐字、拉丁按词的贪心换行；行首不放收尾标点 */
+  var toks=[], re=/[A-Za-z0-9][A-Za-z0-9'’\-]*\s*|\s+|./g, m;
+  while((m=re.exec(text))) toks.push(m[0]);
+  var lines=[], cur='';
+  var CLOSE='，。、；：？！）】》」』…,.;:?!)]}';
+  toks.forEach(function(t){
+    if(t==='\n'){ lines.push(cur); cur=''; return; }
+    var trial=cur+t;
+    if(cur && x.measureText(trial.replace(/\s+$/,'')).width>maxw && CLOSE.indexOf(t.charAt(0))<0){ lines.push(cur.replace(/\s+$/,'')); cur=t.replace(/^\s+/,''); }
+    else cur=trial;
+  });
+  if(cur.trim()) lines.push(cur.replace(/\s+$/,''));
+  return lines;
+}
+function renderWallpaper(q){
+  var dpr=window.devicePixelRatio||1;
+  var W=Math.round((screen.width||1920)*dpr), H=Math.round((screen.height||1080)*dpr);
+  /* 红底/纸底画在 body 上（html[data-theme=red] 切 --bg），海报元素本身是透明的 */
+  var bg=getComputedStyle(document.body).backgroundColor, fg=getComputedStyle(qt).color, fam=getComputedStyle(qt).fontFamily;
+  if(!bg||bg==='rgba(0, 0, 0, 0)'||bg==='transparent') bg=getComputedStyle(document.documentElement).backgroundColor;
+  var lines=[].slice.call(qt.querySelectorAll('.lead .ln')).map(function(l){ return l.textContent; }).filter(Boolean);
+  if(!lines.length) lines=[(q.plain||'').split('\n')[0]];
+  var restEl=qt.querySelector('.rest'), paras=[];
+  if(restEl){
+    var ps=restEl.querySelectorAll('p');
+    paras=(ps.length? [].map.call(ps,function(e){ return e.textContent.trim(); }) : restEl.textContent.split('\n')).filter(Boolean);
+  }
+  var rest=paras.length>0;
+  var c=document.createElement('canvas'); c.width=W; c.height=H;
+  var x=c.getContext('2d');
+  x.fillStyle=bg; x.fillRect(0,0,W,H);
+  /* 版心：左右 7.5%，上下 11%（避开菜单栏 / Dock，也给 16:10 与 16:9 之间的裁切留余量） */
+  var ml=Math.round(W*.075), mt=Math.round(H*.11), cw=W-2*ml, ch=H-2*mt;
+  x.font='700 100px '+fam;
+  var maxw=0; lines.forEach(function(t){ maxw=Math.max(maxw, x.measureText(t).width); });
+  var f=Math.min(cw/maxw*100, H*.2), lh=1.14;
+  var f2=0, gap=0, rl=[], rlh=1.6;
+  function layout(){
+    var h=lines.length*f*lh;
+    rl=[]; f2=0; gap=0;
+    if(rest){
+      f2=Math.max(f*.24, H*.018); gap=f*.55;
+      x.font='500 '+f2+'px '+fam;
+      rl=[];
+      paras.forEach(function(pt,i){ if(i) rl.push(''); rl=rl.concat(wrapText(x, pt, Math.min(cw, f2*32))); });
+      if(rl.length>14){ rl=rl.slice(0,14); rl[13]=rl[13].replace(/[，,、；;]$/,'')+'…'; }   /* 壁纸不是阅读器，正文封顶 14 行 */
+      h+=gap+rl.length*f2*rlh;
+    }
+    return h;
+  }
+  var total=layout();
+  if(total>ch){ f*=ch/total; total=layout(); }
+  var y=mt+(ch-total)/2;
+  x.fillStyle=fg; x.textBaseline='top';
+  x.font='700 '+f+'px '+fam;
+  lines.forEach(function(t){ x.fillText(t, ml, y); y+=f*lh; });
+  if(rest){
+    y+=gap; x.font='500 '+f2+'px '+fam; x.globalAlpha=.82;
+    rl.forEach(function(t){ if(t) x.fillText(t, ml, y); y+=f2*(t? rlh : rlh*.45); });
+    x.globalAlpha=1;
+  }
+  var meta=[q.source, q.use_case].filter(function(v,i,a){ return v && a.indexOf(v)===i; }).join('　');
+  if(meta){
+    var f3=Math.max(H*.016, 14*dpr);
+    x.font='500 '+f3+'px '+fam; x.globalAlpha=.6; x.textBaseline='bottom';
+    x.fillText(meta, ml, H-mt); x.globalAlpha=1;
+  }
+  return c;
+}
+var wallBusy=false;
+function setWallpaper(){
+  var q=at(state.idx); if(!q || wallBusy) return;
+  var b=$('btnWall'); wallBusy=true; b.disabled=true; b.textContent='生成中';
+  status('正在生成壁纸…',0);
+  var png;
+  try{ png=renderWallpaper(q).toDataURL('image/png'); }
+  catch(e){ wallBusy=false; b.disabled=false; b.textContent='壁纸'; status('生成失败：'+e.message,3000); return; }
+  fetch('/wallpaper',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:no3(q.no), png:png})})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){ status(d.error||'保存失败',4000); return; }
+      var folder=(d.path||'').replace(/\/[^\/]+$/,'').replace(/^\/Users\/[^\/]+/,'~');
+      if(d.applied){ b.textContent='已设为壁纸'; status('已设为壁纸 · 图片在 '+folder,3200); }
+      else{ status('图片已存到 '+folder+'，未能自动设置：'+(d.error||''),6000); }
+    })
+    .catch(function(e){ status('网络错误：'+e.message,4000); })
+    .then(function(){ wallBusy=false; b.disabled=false; setTimeout(function(){ b.textContent='壁纸'; },1400); });
+}
 function copyPoster(){
   var q=at(state.idx); if(!q) return;
   var b=$('btnCopy');
@@ -1648,6 +1743,7 @@ srcEl.addEventListener('click', function(){
 btnPin.addEventListener('click', function(){ togglePin(state.idx); });
 $('btnEdit').addEventListener('click', function(){ var q=at(state.idx); if(q) openCompose(q.id); });
 $('btnDel').addEventListener('click', function(){ var q=at(state.idx); if(q) delQuote(q.id); });
+$('btnWall').addEventListener('click', setWallpaper);
 $('btnCopy').addEventListener('click', copyPoster);
 btnPrev.addEventListener('click', function(){ step(-1); });
 btnNext.addEventListener('click', function(){ step(1); });
@@ -1998,6 +2094,7 @@ document.addEventListener('keydown', function(e){
     case 'c': case 'C': e.preventDefault(); copyPoster(); break;
     case 'e': case 'E': e.preventDefault(); var qp=at(state.idx); if(qp) openCompose(qp.id); break;
     case 'i': case 'I': e.preventDefault(); showIndex(); break;
+    case 'w': case 'W': e.preventDefault(); setWallpaper(); break;
   }
 });
 

@@ -9,6 +9,7 @@ quotes-app 本地 HTTP 服务（v0.1.0：JSON-as-truth + git 同步，弃 SQLite
 - PATCH  /quotes/<id>     → 编辑正文 {text, source?, use_case?, expected_updated_at?}（CAS 防 stale write）
 - PATCH  /quotes/<id>/pin → 切换收藏置顶 {pinned: bool}
 - POST   /sync-now      → 手动触发 git 同步，回 sync.sh 写的状态
+- POST   /wallpaper     → {name, png(dataURL)} 存 PNG 到 ~/Pictures/quotes-app/ 并设为 macOS 桌面壁纸
 - GET    /health        → {ok, total}
 
 数据：~/quotes-data/quotes.json（单 JSON 对象，本地真库，git 仓根；不进 iCloud）
@@ -23,6 +24,7 @@ quotes-app 本地 HTTP 服务（v0.1.0：JSON-as-truth + git 同步，弃 SQLite
 
 范式来源：~/daily-todo/server.py（_atomic_write + 锁内 read-modify-write + schedule_sync 5s debounce）
 """
+import base64
 import json
 import os
 import shutil
@@ -352,6 +354,51 @@ def _atomic_write(data: dict) -> None:
         raise
 
 
+# ============== 壁纸：存 PNG + osascript 设为桌面 ==============
+# 前端把海报画到 canvas（屏幕像素尺寸）→ POST 过来；这里落盘并调 System Events 设壁纸。
+# 存到 ~/Pictures 而不是数据仓：PNG 不该进 git 同步；壁纸文件删了桌面会回退，所以保留最近几张。
+
+WALLPAPER_DIR = os.path.expanduser(os.environ.get("QUOTES_WALLPAPER_DIR", "~/Pictures/quotes-app"))
+WALLPAPER_KEEP = 12
+
+
+def save_wallpaper(png_data_url: str, name: str = "") -> str:
+    """dataURL/base64 → PNG 文件，返回绝对路径。名字只留 [A-Za-z0-9_-]，时间戳保证每次新路径（同路径 macOS 不刷新）。"""
+    raw = png_data_url.split(",", 1)[1] if png_data_url.startswith("data:") else png_data_url
+    data = base64.b64decode(raw)
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("不是 PNG")
+    safe = "".join(ch for ch in (name or "") if ch.isalnum() or ch in "_-")[:40] or "quote"
+    ts = datetime.now(TZ).strftime("%Y%m%d-%H%M%S") if TZ else datetime.now().strftime("%Y%m%d-%H%M%S")
+    os.makedirs(WALLPAPER_DIR, exist_ok=True)
+    path = os.path.join(WALLPAPER_DIR, f"quote-{safe}-{ts}.png")
+    with open(path, "wb") as f:
+        f.write(data)
+    _cleanup_old_wallpapers(keep=path)
+    return path
+
+
+def _cleanup_old_wallpapers(keep: str) -> None:
+    try:
+        files = [os.path.join(WALLPAPER_DIR, f) for f in os.listdir(WALLPAPER_DIR)
+                 if f.startswith("quote-") and f.endswith(".png")]
+        files.sort(key=os.path.getmtime, reverse=True)
+        for f in files[WALLPAPER_KEEP:]:
+            if f != keep:
+                os.unlink(f)
+    except Exception:
+        pass
+
+
+def apply_wallpaper(path: str) -> None:
+    """System Events 把所有桌面（含多显示器）的图片设成 path。首次会弹系统「自动化」授权。"""
+    script = ('tell application "System Events" to tell every desktop to set picture to POSIX file "%s"'
+              % path.replace("\\", "\\\\").replace('"', '\\"'))
+    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=20)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or r.stdout or "osascript 失败").strip()[:200])
+
+
 # ============== git 同步触发（防抖，照抄 daily-todo schedule_sync）==============
 
 _sync_timer = None
@@ -628,6 +675,25 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, json.dumps(install_update()))
             except Exception as e:
                 self._send(500, json.dumps({"error": str(e)}))
+            return
+
+        if self.path == "/wallpaper":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                payload = json.loads(self.rfile.read(length).decode("utf-8"))
+                path = save_wallpaper(payload.get("png", ""), payload.get("name", ""))
+            except Exception as e:
+                self._send(400, json.dumps({"ok": False, "error": f"保存失败：{e}"}, ensure_ascii=False))
+                return
+            try:
+                apply_wallpaper(path)
+                self._send(200, json.dumps({"ok": True, "path": path, "applied": True}, ensure_ascii=False))
+            except subprocess.TimeoutExpired:
+                self._send(200, json.dumps({"ok": True, "path": path, "applied": False,
+                                            "error": "等待系统授权超时"}, ensure_ascii=False))
+            except Exception as e:
+                self._send(200, json.dumps({"ok": True, "path": path, "applied": False,
+                                            "error": str(e)}, ensure_ascii=False))
             return
 
         if self.path == "/sync-now":
