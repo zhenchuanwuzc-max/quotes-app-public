@@ -16,7 +16,7 @@ Most note/quote tools are either too heavy (a database, an account, a cloud serv
 
 - Browse quotes, full-text search across text / source / use-case.
 - Pin (favorite) quotes to the top.
-- Set any quote as your macOS desktop wallpaper (rendered at screen resolution; saved under `~/Pictures/quotes-app/`).
+- Set any quote as the desktop wallpaper of the display the window is on (macOS; rendered at that screen's resolution, saved under `~/Pictures/quotes-app/`).
 - Add quotes from the browser, or via a small HTTP API.
 - Multi-device sync over your own **private** Git repo.
 - Optional menu-bar packaging on macOS (via `py2app`).

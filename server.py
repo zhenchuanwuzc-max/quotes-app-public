@@ -9,7 +9,7 @@ quotes-app 本地 HTTP 服务（v0.1.0：JSON-as-truth + git 同步，弃 SQLite
 - PATCH  /quotes/<id>     → 编辑正文 {text, source?, use_case?, expected_updated_at?}（CAS 防 stale write）
 - PATCH  /quotes/<id>/pin → 切换收藏置顶 {pinned: bool}
 - POST   /sync-now      → 手动触发 git 同步，回 sync.sh 写的状态
-- POST   /wallpaper     → {name, png(dataURL)} 存 PNG 到 ~/Pictures/quotes-app/ 并设为 macOS 桌面壁纸
+- POST   /wallpaper     → {name, png(dataURL), at:{x,y}} 存 PNG 到 ~/Pictures/quotes-app/ 并设为窗口所在显示器的桌面壁纸
 - GET    /health        → {ok, total}
 
 数据：~/quotes-data/quotes.json（单 JSON 对象，本地真库，git 仓根；不进 iCloud）
@@ -390,13 +390,53 @@ def _cleanup_old_wallpapers(keep: str) -> None:
         pass
 
 
-def apply_wallpaper(path: str) -> None:
-    """System Events 把所有桌面（含多显示器）的图片设成 path。首次会弹系统「自动化」授权。"""
-    script = ('tell application "System Events" to tell every desktop to set picture to POSIX file "%s"'
-              % path.replace("\\", "\\\\").replace('"', '\\"'))
+def _screens() -> list:
+    """所有显示器：{name,id,x,y,w,h}。走 JXA 读 NSScreen——launchd 用的 /usr/bin/python3 没有 PyObjC，
+    osascript 任何进程都有。坐标是 Cocoa 的（主屏左下角为原点，向上为正），id 是 CGDirectDisplayID。"""
+    js = ('ObjC.import("AppKit");var ss=$.NSScreen.screens,o=[];for(var i=0;i<ss.count;i++){'
+          'var s=ss.objectAtIndex(i),f=s.frame;o.push({name:ObjC.unwrap(s.localizedName),'
+          'id:ObjC.unwrap(s.deviceDescription.objectForKey("NSScreenNumber")),'
+          'x:f.origin.x,y:f.origin.y,w:f.size.width,h:f.size.height})}JSON.stringify(o)')
+    r = subprocess.run(["osascript", "-l", "JavaScript", "-e", js], capture_output=True, text=True, timeout=10)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or "读取显示器失败").strip()[:200])
+    return json.loads(r.stdout.strip() or "[]")
+
+
+def display_at(px: float, py: float, screens=None) -> dict:
+    """浏览器给的窗口中心点（主屏左上角为原点、向下为正、单位 pt）落在哪块显示器上。
+    Cocoa → 浏览器坐标：top = 主屏高 - (y + h)。找不到返回 None。"""
+    screens = _screens() if screens is None else screens
+    if not screens:
+        return None
+    main_h = screens[0]["h"]  # screens[0] 是主屏（带菜单栏那块），Cocoa 原点在它左下角
+    for s in screens:
+        top = main_h - (s["y"] + s["h"])
+        if s["x"] <= px < s["x"] + s["w"] and top <= py < top + s["h"]:
+            return s
+    return None
+
+
+def _osa(script: str) -> None:
     r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=20)
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout or "osascript 失败").strip()[:200])
+
+
+def apply_wallpaper(path: str, display: dict = None) -> str:
+    """只设窗口所在的那块显示器（System Events 的 desktop id == CGDirectDisplayID，按 id 找；
+    找不到再按显示器名字；都不行退到 current desktop）。首次会弹系统「自动化」授权。返回实际落到哪。"""
+    posix = 'POSIX file "%s"' % path.replace("\\", "\\\\").replace('"', '\\"')
+    if display:
+        for sel in ('(first desktop whose id is %d)' % int(display["id"]),
+                    '(first desktop whose display name is "%s")' % str(display["name"]).replace('"', '\\"')):
+            try:
+                _osa('tell application "System Events" to set picture of %s to %s' % (sel, posix))
+                return str(display["name"])
+            except RuntimeError:
+                continue
+    _osa('tell application "System Events" to set picture of current desktop to %s' % posix)
+    return ""
 
 
 # ============== git 同步触发（防抖，照抄 daily-todo schedule_sync）==============
@@ -686,8 +726,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(400, json.dumps({"ok": False, "error": f"保存失败：{e}"}, ensure_ascii=False))
                 return
             try:
-                apply_wallpaper(path)
-                self._send(200, json.dumps({"ok": True, "path": path, "applied": True}, ensure_ascii=False))
+                at = payload.get("at") or {}
+                display = None
+                try:
+                    display = display_at(float(at.get("x")), float(at.get("y"))) if at else None
+                except Exception:
+                    display = None
+                where = apply_wallpaper(path, display)
+                self._send(200, json.dumps({"ok": True, "path": path, "applied": True,
+                                            "display": where}, ensure_ascii=False))
             except subprocess.TimeoutExpired:
                 self._send(200, json.dumps({"ok": True, "path": path, "applied": False,
                                             "error": "等待系统授权超时"}, ensure_ascii=False))

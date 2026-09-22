@@ -471,7 +471,7 @@ html[data-theme="red"] #qt code{box-shadow:inset 0 -.28em 0 rgba(255,255,255,.28
     <button class="pin-toggle" id="btnPin" type="button" aria-pressed="false">置顶</button>
     <button class="tbtn" id="btnEdit" type="button">编辑</button>
     <button class="tbtn" id="btnDel" type="button">删除</button>
-    <button class="tbtn" id="btnWall" type="button" title="把这一屏做成桌面壁纸">壁纸</button>
+    <button class="tbtn" id="btnWall" type="button" title="把这一屏设为本显示器的桌面壁纸">壁纸</button>
     <button class="btn-copy" id="btnCopy" type="button">复制</button>
   </footer>
 </div>
@@ -1567,12 +1567,14 @@ function setWallpaper(){
   var png;
   try{ png=renderWallpaper(q).toDataURL('image/png'); }
   catch(e){ wallBusy=false; b.disabled=false; b.textContent='壁纸'; status('生成失败：'+e.message,3000); return; }
-  fetch('/wallpaper',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:no3(q.no), png:png})})
+  /* 窗口中心点（主屏左上为原点）→ server 据此只设这块显示器 */
+  var pos={ x:(window.screenX||0)+(window.outerWidth||window.innerWidth)/2, y:(window.screenY||0)+(window.outerHeight||window.innerHeight)/2 };
+  fetch('/wallpaper',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:no3(q.no), png:png, at:pos})})
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(!d.ok){ status(d.error||'保存失败',4000); return; }
       var folder=(d.path||'').replace(/\/[^\/]+$/,'').replace(/^\/Users\/[^\/]+/,'~');
-      if(d.applied){ b.textContent='已设为壁纸'; status('已设为壁纸 · 图片在 '+folder,3200); }
+      if(d.applied){ b.textContent='已设为壁纸'; status('已设为壁纸'+(d.display? '（'+d.display+'）':'（当前桌面）')+' · 图片在 '+folder,3200); }
       else{ status('图片已存到 '+folder+'，未能自动设置：'+(d.error||''),6000); }
     })
     .catch(function(e){ status('网络错误：'+e.message,4000); })
