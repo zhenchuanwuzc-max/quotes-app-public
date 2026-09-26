@@ -1,6 +1,6 @@
 #!/bin/bash
 # quotes-app 跨机同步（git）
-# 顺序：本地 commit → pull --rebase → push。commit 在最前，因为它不需要网络。
+# 顺序：本地 commit → fetch（按线路、有硬超时）→ 本地 rebase → push。commit 在最前，因为它不需要网络。
 # 日志 ~/Library/Logs/quotes-sync.log（本地盘持久，0600）；状态 /tmp/quotes-sync.status
 #
 # 注意：本脚本运行在 ~/quotes-data/（数据 git 仓根），不是 iCloud 代码目录。
@@ -26,6 +26,20 @@
 #   R8 已注册的自定义 merge driver 退非 0 时，git **不补冲突标记**，把上游版本原样留在
 #      工作区（合法 JSON，闸放行），add -u 会把它当成冲突解决结果提交 —— 本地新金句
 #      只剩孤儿 stash。旧版全文除 --autostash 外没有任何一处检查 git stash。
+#
+# ============ 2026-09-25 网络层（照 ~/daily-todo-data/sync.sh 移植）============
+# 现象：2026-09-23 家里电脑 GitHub SSH:22 间歇性卡死（连上不回话）。git 没有自带超时，
+#   本脚本的 pull 挂了十几分钟；launchd 下一轮被锁挡住，/sync-now 45 秒超时只杀 bash、
+#   git 和 ssh 子进程照样残留。
+# 修法：
+#   N1 每个联网动作（fetch / push / 推后复核）都走 run_to 硬超时，到点把 git 连同 ssh 整组杀。
+#   N2 线路按「本机上次走通的（.git/sync-route，不进仓库）→ SSH:22 → SSH over 443
+#      → 443 走系统代理」依次试。只改传输（GIT_SSH_COMMAND / -c http.proxy），不改 remote URL。
+#      SYNC_ROUTES 环境变量可强制线路顺序（排障用）。
+#   N3 pull --rebase 拆成「有超时的 fetch」+「本地 rebase」，连不上和合并失败分开报。
+#   N4 取消旧版 pull/push 失败时在 SSH ⇄ HTTPS+PAT 之间改写 remote URL 的自愈（R1/R2 那套）：
+#      它由线路层取代，且改 remote 本身就是 R1 单向门的来源。本脚本不再读 .gh-token；
+#      若某台机的 origin 已是 https（旧版切过去的），走 https / https-proxy 线路，日志照旧脱敏（R7）。
 set -e
 cd "$(dirname "$0")" || exit 0
 
@@ -48,9 +62,6 @@ chmod 600 "$LOG" 2>/dev/null || true   # R7：日志可能含凭据痕迹，不�
 # 且它是「最近一次结果」的瞬时状态，重启清掉语义正确。别去"统一"它，会打断 App 里的同步按钮。
 STATUS="/tmp/quotes-sync.status"
 
-TOKEN_FILE="$PWD/.gh-token"
-REPO="zhenchuanwuzc-max/quotes-app-data"
-SSH_URL="git@github.com:${REPO}.git"
 LOCK="$PWD/.synclock"
 HOLD_LOCK=0
 
@@ -164,7 +175,7 @@ fi
 # ---- 第一步：本地 commit（不需要网络）----
 # R5：旧版把 commit 放在 pull 之后，远端一坏本地就再不产生快照。
 # 现在先落地本地版本历史，网络出问题最多是「没推上去」，绝不会「连快照都没有」。
-# 副作用红利：工作区变干净后，下面的 pull --rebase 基本不再依赖 autostash，R8 那条路几乎走不到。
+# 副作用红利：工作区变干净后，下面的 rebase 基本不再依赖 autostash，R8 那条路几乎走不到。
 commit_local() {
     if [ -z "$(git status --porcelain)" ]; then return 0; fi
     gitq git add -u || true
@@ -185,54 +196,59 @@ if ! git remote get-url origin > /dev/null 2>&1; then
     log "no remote, skip"; finish ok "无远端，跳过（本地已提交）" 0
 fi
 
-is_ssh_url() { case "$1" in git@github.com:*) return 0 ;; *) return 1 ;; esac; }
-read_token() { [ -f "$TOKEN_FILE" ] && tr -d '[:space:]' < "$TOKEN_FILE" || echo ''; }
+# ---------------- 网络层：硬超时 + 多线路兜底（N1/N2，见文件头 2026-09-25 段）----------------
+FETCH_TIMEOUT=12
+PUSH_TIMEOUT=20
+ROUTE_FILE=".git/sync-route"
+SSH_BASE="ssh -o BatchMode=yes -o ConnectTimeout=8 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o StrictHostKeyChecking=accept-new"
 
-# R2：PAT 对**本仓**是否真有 push 权限。旧版不验就改 remote，正是事故起点。
-pat_has_push() {
-    local tok="$1" ans
-    [ -n "$tok" ] || return 1
-    ans="$(curl -s --max-time 15 \
-            -H "Authorization: Bearer ${tok}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${REPO}" 2>/dev/null \
-          | "$PY" -c 'import sys,json
-try:
-    print("yes" if json.load(sys.stdin).get("permissions",{}).get("push") else "no")
-except Exception:
-    print("no")' 2>/dev/null)"
-    [ "$ans" = "yes" ]
+# run_to <秒> <命令…>：带硬超时执行；超时返回 124
+run_to() {
+    local secs="$1"; shift
+    if [ ! -x /usr/bin/perl ]; then "$@"; return $?; fi
+    /usr/bin/perl -e '
+        my $t = shift;
+        my $pid = fork();
+        die "fork: $!" unless defined $pid;
+        if ($pid == 0) { setpgrp(0, 0); exec @ARGV or exit 127; }
+        setpgrp($pid, $pid);
+        $SIG{ALRM} = sub { kill "TERM", -$pid; sleep 2; kill "KILL", -$pid; waitpid($pid, 0); exit 124; };
+        alarm $t;
+        waitpid($pid, 0);
+        alarm 0;
+        exit(($? & 127) ? 128 + ($? & 127) : $? >> 8);
+    ' "$secs" "$@"
 }
 
-# R3：launchd 里没有代理，HTTPS 直连 github.com 实测 75 秒超时失败，而 SSH 正常。
-# 所以切 HTTPS 之前必须先确认「本进程当前环境下 HTTPS 真的走得通」，否则切过去必然更糟。
-https_reachable() {
-    curl -s -o /dev/null --max-time 8 https://github.com/ 2>/dev/null
+# 系统 HTTPS 代理（Clash 等），没开就不试代理线路。
+# 读 scutil 而不是 HTTPS_PROXY 环境变量：launchd 环境里没有代理变量（R3）
+PROXY=""
+if [ "$(scutil --proxy 2>/dev/null | awk '/HTTPSEnable/{print $3}')" = "1" ]; then
+    PH="$(scutil --proxy | awk '/HTTPSProxy/{print $3}')"; PP="$(scutil --proxy | awk '/HTTPSPort/{print $3}')"
+    if [ -n "$PH" ] && [ -n "$PP" ]; then PROXY="$PH:$PP"; fi
+fi
+
+# use_route <线路>：设置本次 git 的传输方式；该线路本机用不了返回 1
+GIT_CFG=()
+use_route() {
+    GIT_CFG=()
+    case "$1" in
+        ssh22)        export GIT_SSH_COMMAND="$SSH_BASE" ;;
+        ssh443)       export GIT_SSH_COMMAND="$SSH_BASE -o Hostname=ssh.github.com -p 443" ;;
+        ssh443-proxy) [ -n "$PROXY" ] || return 1
+                      export GIT_SSH_COMMAND="$SSH_BASE -o Hostname=ssh.github.com -p 443 -o ProxyCommand='nc -X connect -x $PROXY %h %p'" ;;
+        https)        ;;
+        https-proxy)  [ -n "$PROXY" ] || return 1; GIT_CFG=(-c "http.proxy=http://$PROXY") ;;
+        *)            return 1 ;;
+    esac
 }
 
-# 切到 HTTPS+PAT。两道闸都过才切：PAT 对本仓有 push 权限 且 当前环境 HTTPS 可达。
-switch_to_https() {
-    local tok; tok="$(read_token)"
-    [ -n "$tok" ] || { log "无 .gh-token → 保持 SSH 不动"; return 1; }
-    if ! https_reachable; then
-        log "当前环境 HTTPS 直连不通（launchd 无代理）→ 切过去也没用，保持 SSH 不动"
-        return 1
-    fi
-    if ! pat_has_push "$tok"; then
-        log "PAT 对本仓无 push 权限（或 API 不通）→ 保持 SSH 不动（这正是 2026-08-30 事故的起点）"
-        return 1
-    fi
-    git remote set-url origin "https://${tok}@github.com/${REPO}.git" 2>/dev/null || true
-    log "已切 HTTPS+PAT（PAT 权限与 HTTPS 连通性均已验证）"
-    return 0
-}
-
-# R1：反向路径。旧版没有它，一次误切就是永久单向门。
-switch_to_ssh() {
-    git remote set-url origin "$SSH_URL" 2>/dev/null || true
-    log "已切回 SSH（堵死旧版单向门）"
-    return 0
-}
+case "$(git remote get-url origin)" in
+    https://*) ALL_ROUTES="https https-proxy" ;;
+    *)         ALL_ROUTES="ssh22 ssh443 ssh443-proxy" ;;
+esac
+LAST="$(cat "$ROUTE_FILE" 2>/dev/null || true)"
+ROUTES="${SYNC_ROUTES:-$LAST $ALL_ROUTES}"
 
 # pull 之后无条件检查，不只在失败路径上查。
 # R8：merge driver 退非 0 时 pull 仍返回 0，工作区被换成上游版本且不带冲突标记，
@@ -263,35 +279,36 @@ post_pull_guard() {
     fi
 }
 
-try_pull() { gitq git pull --rebase --autostash origin main; }
+# ---- 第二步：fetch（按线路、有超时）→ 本地 rebase（N3）----
+ROUTE=""; TRIED=""
+for r in $ROUTES; do
+    case " $TRIED " in *" $r "*) continue ;; esac
+    TRIED="$TRIED $r"
+    use_route "$r" || continue
+    if gitq run_to "$FETCH_TIMEOUT" git "${GIT_CFG[@]}" fetch -q origin main; then
+        ROUTE="$r"; echo "$r" > "$ROUTE_FILE"; break
+    else
+        log "fetch via $r FAILED (rc=$?)"
+    fi
+done
+if [ -z "$ROUTE" ]; then
+    log "所有线路都连不上 GitHub（试过:$TRIED）"
+    # 本地 commit 已在第一步完成，这里失败只是「没推上去」，本地历史是安全的
+    finish fail "连不上 GitHub（本地已提交，等下次）" 1
+fi
+log "fetch ok via $ROUTE"
 
-# ---- 第二步：pull（失败则按错误类型双向自愈后重试一次）----
-ORIGIN_URL="$(git remote get-url origin 2>/dev/null || echo '')"
-if try_pull; then
+if gitq git rebase --autostash origin/main; then
     log "pull ok"
     post_pull_guard
 else
-    log "pull 失败（remote=$(printf '%s' "$ORIGIN_URL" | redact)），进入自愈判定"
+    log "rebase 失败，放弃本轮"
     gitq git rebase --abort || true
     gitq git merge --abort || true
-    SWITCHED=0
-    if is_ssh_url "$ORIGIN_URL"; then
-        switch_to_https && SWITCHED=1
-    else
-        switch_to_ssh && SWITCHED=1
+    if has_autostash; then
+        gitq git stash pop || log "!! autostash 未能恢复，本地改动在 git stash list 里"
     fi
-    if [ "$SWITCHED" = "1" ] && try_pull; then
-        log "pull ok（自愈切换后成功）"
-        post_pull_guard
-    else
-        gitq git rebase --abort || true
-        gitq git merge --abort || true
-        if has_autostash; then
-            gitq git stash pop || log "!! autostash 未能恢复，本地改动在 git stash list 里"
-        fi
-        # 本地 commit 已在第一步完成，这里失败只是「没推上去」，本地历史是安全的
-        finish fail "拉取失败（本地已提交，等下次）" 1
-    fi
+    finish fail "合并远端改动失败（本地已提交，等下次）" 1
 fi
 
 # ---- 第三步：push ----
@@ -300,20 +317,13 @@ fi
 commit_local   # pull 之后可能又有 App 新写入，再收一次
 AHEAD="$(ahead_count)"
 if [ "$AHEAD" -gt 0 ]; then
-    log "本地领先远端 ${AHEAD} 个提交，开始推送"
-    if gitq git push origin main; then
-        log "pushed"
-    else
-        log "push 失败，尝试一次自愈切换后重推"
-        CUR="$(git remote get-url origin 2>/dev/null || echo '')"
-        if is_ssh_url "$CUR"; then switch_to_https || true; else switch_to_ssh || true; fi
-        if ! gitq git push origin main; then
-            finish fail "推送失败（本地已提交，等下次）" 1
-        fi
-        log "pushed（自愈切换后成功）"
+    log "本地领先远端 ${AHEAD} 个提交，开始推送 via $ROUTE"
+    if ! gitq run_to "$PUSH_TIMEOUT" git "${GIT_CFG[@]}" push -q origin main; then
+        finish fail "推送失败（本地已提交，下次自动补推）" 1
     fi
-    # 复核：推完必须真的不再领先，否则别报绿灯
-    git fetch origin main >/dev/null 2>&1 || true
+    log "pushed $AHEAD commit(s) via $ROUTE"
+    # 复核：推完必须真的不再领先，否则别报绿灯（复核的 fetch 同样要有超时）
+    gitq run_to "$FETCH_TIMEOUT" git "${GIT_CFG[@]}" fetch -q origin main || true
     if [ "$(ahead_count)" -gt 0 ]; then
         finish fail "推送后本地仍领先远端，未真正同步" 1
     fi
