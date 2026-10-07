@@ -68,6 +68,17 @@ Replace the placeholders before using:
 - `Your Name` / `you@example.com` — the Git identity used for sync commits.
 - `com.example.quotes-*` — launchd labels / bundle ids, if you package it.
 
+## Release: `scripts/release.sh`
+
+Run the smoke tests (`tests/test_smoke.py`, stdlib `unittest`) and, only if they all pass, restart the launchd service and health-check it:
+
+```bash
+scripts/release.sh               # tests -> launchctl kickstart -k gui/$(id -u)/com.ocean.quotes-app -> poll / and /quotes for 10s
+scripts/release.sh --no-restart  # tests only
+```
+
+The tests start a throwaway `server.py` on a random free port with a temp data dir (`QUOTES_DATA_DIR`) and temp backup dir (`QUOTES_BACKUP_DIR`), so they never touch your real data repo, never run git sync, and never hit the live port. Any failure exits non-zero without restarting; a failed post-restart health check also raises a macOS notification.
+
 ## License
 
 MIT — see `LICENSE`.

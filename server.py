@@ -61,7 +61,7 @@ DATA_FILE = os.path.join(DATA_DIR, "quotes.json")
 
 # 备份路径（进 iCloud，跨机/误删恢复用）—— 与 git 历史互补的第二道保险
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BACKUP_DIR = os.path.join(SCRIPT_DIR, "_backups")
+BACKUP_DIR = os.environ.get("QUOTES_BACKUP_DIR") or os.path.join(SCRIPT_DIR, "_backups")  # env 仅供自动化测试隔离备份目录
 BACKUP_KEEP_DAYS = 30
 BACKUP_KEEP_COUNT = 50
 
