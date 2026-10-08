@@ -70,14 +70,26 @@ Replace the placeholders before using:
 
 ## Release: `scripts/release.sh`
 
-Run the smoke tests (`tests/test_smoke.py`, stdlib `unittest`) and, only if they all pass, restart the launchd service and health-check it:
+Run every test and, only if they all pass, put the current commit live; if the live service then fails its checks, roll back automatically:
 
 ```bash
-scripts/release.sh               # tests -> launchctl kickstart -k gui/$(id -u)/com.ocean.quotes-app -> poll / and /quotes for 10s
+scripts/release.sh               # tests -> install json-merge.py into the data repo -> restart -> probe -> read-only browser check
 scripts/release.sh --no-restart  # tests only
+QUOTES_RELEASE_SIMULATE_FAIL=1 scripts/release.sh   # rollback drill
 ```
 
-The tests start a throwaway `server.py` on a random free port with a temp data dir (`QUOTES_DATA_DIR`) and temp backup dir (`QUOTES_BACKUP_DIR`), so they never touch your real data repo, never run git sync, and never hit the live port. Any failure exits non-zero without restarting; a failed post-restart health check also raises a macOS notification.
+Tests (`/usr/bin/python3 -m unittest discover -s tests -v`, about 13 s):
+
+| File | Protects |
+|---|---|
+| `tests/test_smoke.py` | home page, list, add, empty text rejected, survives restart, search |
+| `tests/test_mutations.py` | edit / pin / delete: effect, persisted, 404, backup written, 409 on stale edit |
+| `tests/test_merge.py` | the git merge driver: concurrent add/edit/pin/delete from two machines, duplicate ids, malformed input refused; plus a real two-clone + bare-remote git run |
+| `tests/test_browser.py` | headless Chromium clicks through the page: list, poster, back, search, add, delete (needs Python `playwright`; `QUOTES_SKIP_BROWSER=1` to skip) |
+
+Every server test runs a throwaway `server.py` on a random free port with temp data / backup / HOME dirs and no `sync.sh`, so tests never touch your real data repo, never run git sync, never hit the live port, and seed only from `quotes.example.json`.
+
+After the restart the script probes `/` and `/quotes`, then runs `tests/live_check.py` (read-only: renders the whole list, opens one poster, goes back). If either fails, the failing commit is saved on a `release-failed/<time>` branch, the checkout is reset to the last successful release (`.git/quotes-release-ok`, else `HEAD~1`), the previous merge driver is restored, the service is restarted and re-probed, and a macOS notification is sent. A dirty working tree is refused.
 
 ## License
 
