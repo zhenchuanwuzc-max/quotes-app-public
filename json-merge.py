@@ -26,12 +26,13 @@ git merge driver —— quotes.json 的 JSON-aware union 合并
 
 目标铁律：合并结果永远是合法 JSON、无冲突标记、不丢"新增"的金句。
 """
+import os
 import sys
 import json
 import re
 
 _MARK = re.compile(r'^(<<<<<<<|=======|>>>>>>>|\|\|\|\|\|\|\|)')
-_LOG = "/tmp/quotes-merge.log"
+_LOG = os.environ.get("QUOTES_MERGE_LOG") or "/tmp/quotes-merge.log"  # env 仅供测试隔离
 
 
 def _log(msg):
