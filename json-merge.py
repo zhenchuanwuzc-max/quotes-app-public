@@ -19,10 +19,14 @@ git merge driver —— quotes.json 的 JSON-aware union 合并
 
 语义（专为"单人多设备金句库"设计）：
   - 按 quote id 取并集：不同 id 两边都保留（add/add 撞位 → 不产生冲突标记）
-  - 相同 id：金句正文不可改，唯一可变字段 = pinned；按 pinned_at 取晚的那条（LWW）
+  - 相同 id：正文组按 updated_at、pin 组按 pinned_at 各自 LWW（见 merge_same）
   - 删除传播：用 base(%O) 识别——某 quote 在 base+本侧存在、对侧已删且本侧未改 → 视为对侧删除，丢弃
-    （删 vs 改 pin 冲突 → 保留被改 pin 的那条，偏向不丢）
-  - 兜底：任一侧能解析就产出合法 JSON；两侧都解析不了才退非 0（让 git 退回标记 + 记日志）
+    （删 vs 改正文/改 pin 冲突 → 保留被改的那条，偏向不丢）
+  - 坏输入（2026-10-07 收紧）：ours/theirs 任一侧不是 {"quotes": [带 id 的对象, ...]} → 退非 0，
+    不改写 %A。git 随即把文件标成未合并，sync.sh 的 post_pull_guard 中止 rebase 并弹通知。
+    旧版「一侧坏了就整份取另一侧」会悄悄丢掉坏的那一侧；读成 {} 的一侧更会被当成「全删了」，
+    把另一侧所有没改过的金句一起删掉（tests/test_merge.py 有复现）。
+    base 坏了不算失败：当作没有共同祖先，只是删除不再传播（宁可复活，不误删）。
 
 目标铁律：合并结果永远是合法 JSON、无冲突标记、不丢"新增"的金句。
 """
@@ -43,8 +47,17 @@ def _log(msg):
         pass
 
 
+def well_formed(d):
+    """合法 = dict + quotes 是数组 + 每条都是带非空字符串 id 的对象。
+    缺 id 的条目合并时无处安放（会被悄悄丢掉），所以整份视为坏输入。"""
+    if not isinstance(d, dict) or not isinstance(d.get("quotes"), list):
+        return False
+    return all(isinstance(q, dict) and isinstance(q.get("id"), str) and q.get("id")
+               for q in d["quotes"])
+
+
 def load(path):
-    """读 JSON；失败时先剥可能存在的冲突标记行再试。返回 (dict_or_None, ok)。"""
+    """读 JSON；失败时先剥可能存在的冲突标记行再试。返回 (dict_or_None, ok)，ok 要求 well_formed。"""
     try:
         with open(path, encoding="utf-8") as f:
             raw = f.read()
@@ -54,10 +67,10 @@ def load(path):
     for txt in (raw, cleaned):
         try:
             d = json.loads(txt)
-            if isinstance(d, dict):
-                return d, True
         except Exception:
             continue
+        if well_formed(d):
+            return d, True
     return None, False
 
 
@@ -136,17 +149,14 @@ def main():
     O, A, B = sys.argv[1], sys.argv[2], sys.argv[3]
     ours, ok_a = load(A)
     theirs, ok_b = load(B)
-    base, _ = load(O)
+    base, _ = load(O)  # 坏/空 → None → 不传播删除
 
-    if not ok_a and not ok_b:
-        _log("[quotes-merge] both sides unparseable -> fallback to git markers")
+    if not (ok_a and ok_b):
+        bad = " + ".join(n for n, ok in (("ours", ok_a), ("theirs", ok_b)) if not ok)
+        _log(f"[quotes-merge] {bad} not a valid quotes file -> refuse (git marks unmerged)")
+        print(f"quotes-merge: {bad} 不是合法的 quotes.json，拒绝合并以免丢数据", file=sys.stderr)
         return 1
-    if ok_a and not ok_b:
-        result = ours
-    elif ok_b and not ok_a:
-        result = theirs
-    else:
-        result = union(ours, theirs, base)
+    result = union(ours, theirs, base)
 
     try:
         with open(A, "w", encoding="utf-8") as f:
