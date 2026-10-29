@@ -199,6 +199,22 @@ mark{background:none;color:var(--ink);font-weight:700}
 .row.copied .mtxt,.row.copied .acts{visibility:hidden}
 .inone{padding:clamp(34px,8vh,80px) 0 0 clamp(12px,1.9vw,30px);font-size:clamp(28px,7vw,72px);font-weight:700;letter-spacing:-.04em}
 
+/* 附件有固定占位，图片到达不改变目录行高度。 */
+.row-media{flex:none;position:relative;width:72px;height:48px;margin-left:auto;background:var(--rule);overflow:hidden}
+.row-media img{display:block;width:100%;height:100%;object-fit:cover}
+.row-media span{position:absolute;right:2px;bottom:2px;background:var(--paper);color:var(--ink);font-size:10px;padding:0 4px}
+.rq{flex:1 1 auto}
+#posterImages{flex:0 0 38%;min-height:100px;max-height:45%;display:flex;gap:12px;overflow-x:auto;margin-top:20px;padding-bottom:3px}
+#posterImages button{flex:0 0 min(100%,400px);min-width:0;height:100%;background:var(--rule);border:1px solid var(--hair)}
+#posterImages img{display:block;width:100%;height:100%;object-fit:contain}
+.field.image-only #posterImages{flex:1 1 auto;max-height:100%;margin-top:0}
+#sourceLink{margin-top:10px;text-underline-offset:3px;color:var(--fg)}
+#imageViewer{position:fixed;inset:0;z-index:30;background:rgba(10,10,10,.94);color:white;display:flex;flex-direction:column;padding:18px;gap:14px}
+.image-viewer-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex:none;font-size:13px}
+#imageViewer img{flex:1 1 auto;min-height:0;width:100%;object-fit:contain}
+#imageViewerMessage{font-size:13px;color:#ddd}
+#imageClose{border:1px solid #aaa;padding:7px 18px;font-size:13px}
+
 /* ================= POSTER ================= */
 #app{position:relative;z-index:2;height:100dvh;display:grid;grid-template-rows:var(--bar) 1fr var(--bar)}
 #stage{
@@ -270,6 +286,7 @@ html[data-theme="red"] #qt code{box-shadow:inset 0 -.28em 0 rgba(255,255,255,.28
   font-size:11px;letter-spacing:0;line-height:1;transition:opacity .15s ease;
 }
 .btn-copy:hover{opacity:.84}
+.btn-copy[disabled]{opacity:.35;cursor:default}
 .nav{display:flex;gap:2px;flex:none}
 .nav button{
   width:clamp(28px,2.8vw,34px);height:clamp(24px,2.8vh,30px);
@@ -339,6 +356,19 @@ html[data-theme="red"] #qt code{box-shadow:inset 0 -.28em 0 rgba(255,255,255,.28
 .fld input::placeholder{color:rgba(18,18,18,.25)}
 .btn-primary{display:inline-flex;align-items:center;justify-content:center;height:var(--btnh);background:var(--ink);color:#fff;border:1px solid var(--ink);padding:0 16px;font-size:11px;letter-spacing:0;line-height:1}
 .btn-primary:hover{background:#000;border-color:#000}
+
+/* 附图上传只更新本面板，正文与光标不重建。 */
+.cmedia-bar{display:flex;align-items:center;gap:12px;flex:none;padding-top:12px;font-size:11px;color:var(--mute)}
+#cAttachments{display:flex;gap:12px;flex:none;overflow-x:auto;max-height:156px;padding-top:12px}
+.attachment-item{position:relative;flex:none;width:112px;border:1px solid var(--hair);padding:5px;display:flex;flex-direction:column;gap:5px;font-size:11px}
+.attachment-item img{display:block;width:100%;height:68px;object-fit:contain;background:var(--rule)}
+.attachment-controls{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.attachment-controls button{text-decoration:underline;text-underline-offset:3px}
+.attachment-error{border-color:var(--red)}
+.attachment-error .attachment-state{color:var(--red)}
+#cMediaState{min-height:1.5em;font-size:11px;color:var(--mute);flex:none}
+#cUrl{width:clamp(110px,21vw,270px)}
+@media(max-width:650px){.row-media{width:54px;height:40px}#posterImages{gap:8px}.cmedia-bar{align-items:flex-start;flex-wrap:wrap}#compose .cfoot{gap:10px 16px}.fld{flex:1 1 125px}.fld input,#cUrl{width:100%}.cmedia-bar span{font-size:10px}}
 
 /* ================= help ================= */
 #help{position:fixed;inset:0;z-index:12;background:rgba(18,18,18,.48);display:flex;align-items:center;justify-content:center;padding:var(--gut)}
@@ -456,9 +486,11 @@ html[data-theme="red"] #qt code{box-shadow:inset 0 -.28em 0 rgba(255,255,255,.28
       <button class="m uc" id="uc" type="button"></button>
       <button class="m src" id="src" type="button"></button>
       <div class="m dt" id="date"></div>
+      <a class="m" id="sourceLink" target="_blank" rel="noopener noreferrer" hidden>回到原视频 ↗</a>
     </div>
     <div class="field">
       <div class="quote" id="quote"><div id="qt"></div></div>
+      <div id="posterImages" aria-label="图片附件" hidden></div>
     </div>
   </main>
 
@@ -486,10 +518,15 @@ html[data-theme="red"] #qt code{box-shadow:inset 0 -.28em 0 rgba(255,255,255,.28
   </div>
   <div class="cbody">
     <div id="cbox"><div id="cedit"></div></div>
+    <div class="cmedia-bar"><button class="tag" id="cAddImages" type="button">添加图片</button><span>也可粘贴截图 · 最多 4 张，每张 4 MB</span></div>
+    <input id="cImages" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+    <div id="cAttachments" aria-label="待保存图片"></div>
+    <div id="cMediaState" role="status" aria-live="polite"></div>
   </div>
   <div class="cfoot">
     <div class="fld"><label>出处</label><input id="cSrc" placeholder="可留空" autocomplete="off"></div>
     <div class="fld"><label>用途</label><input id="cUse" list="uclist" placeholder="可留空" autocomplete="off"></div>
+    <div class="fld"><label for="cUrl">链接</label><input id="cUrl" type="url" placeholder="https://…（可留空）" autocomplete="off"></div>
     <datalist id="uclist"></datalist>
   </div>
 </section>
@@ -509,6 +546,13 @@ html[data-theme="red"] #qt code{box-shadow:inset 0 -.28em 0 rgba(255,255,255,.28
     <div class="hrow"><span>返回 / 关闭</span><b>Esc</b></div>
     <div class="hrow"><span>本面板</span><b>?</b></div>
   </div>
+</section>
+
+<!-- ============ 看图 ============ -->
+<section id="imageViewer" role="dialog" aria-modal="true" aria-label="查看图片" hidden>
+  <div class="image-viewer-bar"><span id="imageViewerTitle">图片</span><button type="button" id="imageClose">关闭 · Esc</button></div>
+  <img id="imageFull" alt="">
+  <div id="imageViewerMessage" role="status" aria-live="polite"></div>
 </section>
 
 <!-- ============ 更新横幅 ============ -->
@@ -553,6 +597,15 @@ function mdToPlain(src){
   return s.replace(/\*\*/g,'');
 }
 
+function safeSourceUrl(value){
+  try{ var u=new URL(String(value||'')); return u.protocol==='https:' && !u.username && !u.password?u.href:''; }
+  catch(e){ return ''; }
+}
+function safeAttachments(items){
+  if(!Array.isArray(items)) return [];
+  return items.filter(function(a){ return a && /^attachments\/[a-f0-9]{64}\.(png|jpg|webp)$/.test(a.path||''); })
+    .slice(0,4).map(function(a){ return {path:a.path,mime:String(a.mime||''),alt:String(a.alt||'图片').slice(0,160)}; });
+}
 function norm(q){
   var t=String(q.text==null?'':q.text);
   return {
@@ -560,6 +613,8 @@ function norm(q){
     text:t,
     plain:mdToPlain(t),
     source:String(q.source||''),
+    source_url:safeSourceUrl(q.source_url),
+    attachments:safeAttachments(q.attachments),
     use_case:String(q.use_case||''),
     pinned:!!q.pinned,
     created_at:String(q.created_at||''),
@@ -586,7 +641,8 @@ var root=document.documentElement,
     qInput=$('q'), sboxEl=document.querySelector('.sbox'),
     app=$('app'), stage=$('stage'), qtBox=$('quote'), qt=$('qt'),
     pnoEl=$('pno'), ucEl=$('uc'), srcEl=$('src'), dateEl=$('date'), chip=$('chipFilter'),
-    composeEl=$('compose'), cbox=$('cbox'), cSrc=$('cSrc'), cUse=$('cUse'), cTitle=$('cTitle'),
+    composeEl=$('compose'), cbox=$('cbox'), cSrc=$('cSrc'), cUse=$('cUse'), cUrl=$('cUrl'), cTitle=$('cTitle'),
+    posterImages=$('posterImages'), sourceLink=$('sourceLink'), imageViewer=$('imageViewer'), imageFull=$('imageFull'),
     helpEl=$('help'),
     statusEl=$('status'), statusText=$('statusText'), statusBar=$('statusBar'), statusFill=$('statusFill'),
     ubar=$('ubar'),
@@ -1095,7 +1151,16 @@ function renderList(){
     }
     typeset(rq,{gap:true});
     if(hilite(rq,s)) rq.classList.add('hl');
+    if(!q.plain && q.attachments.length) rq.textContent='图片摘录';
     rb.appendChild(rq);
+    if(q.attachments.length){
+      var thumb=document.createElement('div'); thumb.className='row-media';
+      var thumbImg=document.createElement('img'); thumbImg.src='/'+q.attachments[0].path;
+      thumbImg.alt=q.attachments[0].alt; thumbImg.loading='lazy'; thumbImg.decoding='async';
+      thumb.appendChild(thumbImg);
+      if(q.attachments.length>1){ var count=document.createElement('span'); count.textContent=q.attachments.length+' 张'; thumb.appendChild(count); }
+      rb.appendChild(thumb);
+    }
 
     var rm=document.createElement('div');
     rm.className='rmeta';
@@ -1315,6 +1380,9 @@ function fitQuote(){ layoutPoster(); }
 
 function renderPoster(animate){
   var L=state.L, n=L.length, i=state.idx;
+  posterImages.innerHTML=''; posterImages.hidden=true;
+  sourceLink.hidden=true; sourceLink.removeAttribute('href');
+  qtBox.hidden=false; qtBox.parentElement.classList.remove('image-only');
 
   if(state.filter!==null || state.q.trim()){
     chip.hidden=false;
@@ -1342,6 +1410,8 @@ function renderPoster(animate){
   }
 
   var q=L[i];
+  $('btnWall').disabled=wallBusy || !q.plain.trim();
+  $('btnCopy').disabled=!q.plain.trim();
   root.setAttribute('data-theme', q.pinned?'red':'paper');
 
   pnoEl.hidden=false; pnoEl.textContent=no3(q.no);
@@ -1349,6 +1419,17 @@ function renderPoster(animate){
   srcEl.hidden=!q.source; srcEl.textContent='';
   if(q.source){ srcEl.textContent=q.source; typeset(srcEl,{gap:true}); }
   dateEl.hidden=false; dateEl.textContent=ymd(q.created_at);
+  if(q.source_url){ sourceLink.href=q.source_url; sourceLink.hidden=false; }
+  if(q.attachments.length){
+    posterImages.hidden=false;
+    q.attachments.forEach(function(a){
+      var b=document.createElement('button'); b.type='button'; b.setAttribute('aria-label','放大图片：'+a.alt);
+      var image=document.createElement('img'); image.src='/'+a.path; image.alt=a.alt;
+      image.loading='lazy'; image.decoding='async'; b.appendChild(image);
+      b.addEventListener('click',function(){ openImage(a,b); }); posterImages.appendChild(b);
+    });
+    if(!q.plain.trim()){ qtBox.hidden=true; qtBox.parentElement.classList.add('image-only'); }
+  }
 
   if(animate!==false){ qt.style.animation='none'; void qt.offsetWidth; qt.style.animation=''; }
   var parts=posterParts(q);
@@ -1371,6 +1452,31 @@ function setPinLabel(on){
   btnPin.setAttribute('aria-pressed', on?'true':'false');
   btnPin.textContent = on?'取消置顶':'置顶';
 }
+
+/* 原图用单独的可退出层，不改变当前条目或目录滚动位置。 */
+var imageReturnFocus=null;
+function openImage(attachment,trigger){
+  imageReturnFocus=trigger||document.activeElement;
+  imageViewer.hidden=false;
+  $('imageViewerTitle').textContent=attachment.alt||'图片';
+  $('imageViewerMessage').textContent='载入中……';
+  imageFull.alt=attachment.alt||'图片'; imageFull.src='/'+attachment.path;
+  $('imageClose').focus();
+}
+function closeImage(){
+  imageViewer.hidden=true; imageFull.removeAttribute('src');
+  if(imageReturnFocus && imageReturnFocus.isConnected) imageReturnFocus.focus({preventScroll:true});
+  imageReturnFocus=null;
+}
+imageFull.addEventListener('load',function(){ $('imageViewerMessage').textContent=''; });
+imageFull.addEventListener('error',function(){ if(!imageViewer.hidden) $('imageViewerMessage').textContent='图片尚未同步或无法读取，请关闭后重试'; });
+$('imageClose').addEventListener('click',closeImage);
+imageViewer.addEventListener('click',function(e){ if(e.target===imageViewer) closeImage(); });
+document.addEventListener('keydown',function(e){
+  if(imageViewer.hidden) return;
+  if(e.key==='Escape'){ e.preventDefault(); e.stopImmediatePropagation(); closeImage(); }
+  else if(e.key==='Tab'){ e.preventDefault(); $('imageClose').focus(); }
+},true);
 
 /* ================= views & routing ================= */
 var lastHash='';
@@ -1562,6 +1668,7 @@ function renderWallpaper(q){
 var wallBusy=false;
 function setWallpaper(){
   var q=at(state.idx); if(!q || wallBusy) return;
+  if(!q.plain.trim()){ status('这条只有图片，没有可生成壁纸的文字'); return; }
   var b=$('btnWall'); wallBusy=true; b.disabled=true; b.textContent='生成中';
   status('正在生成壁纸…',0);
   var png;
@@ -1582,6 +1689,7 @@ function setWallpaper(){
 }
 function copyPoster(){
   var q=at(state.idx); if(!q) return;
+  if(!q.plain.trim()){ status('这条只有图片，点图片可查看'); return; }
   var b=$('btnCopy');
   copyText(q.plain, function(){
     b.textContent='已复制';
@@ -1794,6 +1902,86 @@ function repaint(scrollTop,keepId){
 
 /* ---- compose：新增 / 编辑共用一个面板，正文走 Vditor（IR） ---- */
 var vditor=null, vditorReady=false, editingId=null, editingBase=null, saving=false;
+var composeAttachments=[], composeGeneration=0;
+var IMAGE_LIMIT=4, IMAGE_BYTES=4*1024*1024;
+function clearComposeAttachments(){
+  composeGeneration++;
+  composeAttachments.forEach(function(item){ if(item.objectUrl) URL.revokeObjectURL(item.objectUrl); });
+  composeAttachments=[]; $('cAttachments').innerHTML=''; $('cMediaState').textContent='';
+  $('cImages').value=''; updateComposeSave();
+}
+function updateComposeSave(){
+  $('cSave').disabled=saving || composeAttachments.some(function(item){ return item.state!=='ready'; });
+  $('cSave').textContent=saving?'保存中……':editingId?'保存':'存入';
+  $('cAttachments').querySelectorAll('button').forEach(function(b){ b.disabled=saving; });
+  $('cAddImages').disabled=saving || composeAttachments.length>=IMAGE_LIMIT;
+}
+function renderComposeAttachments(){
+  var host=$('cAttachments'); host.innerHTML='';
+  composeAttachments.forEach(function(item){
+    var box=document.createElement('div'); box.className='attachment-item attachment-'+item.state;
+    var img=document.createElement('img'); img.src=item.objectUrl || '/'+item.attachment.path;
+    img.alt=item.file?item.file.name:item.attachment.alt; img.decoding='async'; box.appendChild(img);
+    var controls=document.createElement('div'); controls.className='attachment-controls';
+    var label=document.createElement('span'); label.className='attachment-state';
+    label.textContent=item.state==='uploading'?'上传中……':item.state==='error'?'上传失败':'已就绪';
+    controls.appendChild(label);
+    if(item.state==='error'){
+      var retry=document.createElement('button'); retry.type='button'; retry.textContent='重试';
+      retry.addEventListener('click',function(){ uploadComposeImage(item); }); controls.appendChild(retry);
+    }
+    var remove=document.createElement('button'); remove.type='button'; remove.textContent='移除'; remove.setAttribute('aria-label','移除图片');
+    remove.disabled=saving;
+    remove.addEventListener('click',function(){
+      var i=composeAttachments.indexOf(item); if(i<0) return;
+      composeAttachments.splice(i,1); if(item.objectUrl) URL.revokeObjectURL(item.objectUrl);
+      renderComposeAttachments();
+    });
+    controls.appendChild(remove); box.appendChild(controls); host.appendChild(box);
+  });
+  $('cMediaState').textContent=composeAttachments.some(function(item){return item.state==='error';})?'图片未上传成功，可重试或移除；正文已保留。':
+    composeAttachments.some(function(item){return item.state==='uploading';})?'正在上传图片，完成后即可保存。':'';
+  updateComposeSave();
+}
+function readImageData(file){
+  return new Promise(function(resolve,reject){
+    var reader=new FileReader(); reader.onload=function(){resolve(reader.result);};
+    reader.onerror=function(){reject(new Error('读取图片失败'));}; reader.readAsDataURL(file);
+  });
+}
+function uploadComposeImage(item){
+  var generation=composeGeneration; item.state='uploading'; renderComposeAttachments();
+  readImageData(item.file).then(function(data){ return api('/attachments',{method:'POST',body:{data_url:data,name:item.file.name}}); })
+    .then(function(r){
+      if(generation!==composeGeneration || composeAttachments.indexOf(item)<0) return;
+      var attachments=safeAttachments([r.attachment]);
+      if(!r.ok || !attachments.length) throw new Error(r.error||'上传失败');
+      item.attachment=attachments[0]; item.state='ready'; renderComposeAttachments();
+    }).catch(function(e){
+      if(generation!==composeGeneration || composeAttachments.indexOf(item)<0) return;
+      item.state='error'; renderComposeAttachments();
+      status('图片上传失败：'+String(e.message||e).slice(0,60),3600);
+    });
+}
+function addComposeImages(files){
+  if(saving) return;
+  Array.from(files).forEach(function(file){
+    if(composeAttachments.length>=IMAGE_LIMIT){ status('每条最多添加 4 张图片'); return; }
+    if(['image/png','image/jpeg','image/webp'].indexOf(file.type)<0){ status('请使用 PNG、JPEG 或 WebP 图片'); return; }
+    if(file.size>IMAGE_BYTES){ status('每张图片不能超过 4 MB'); return; }
+    var item={file:file,objectUrl:URL.createObjectURL(file),attachment:null,state:'uploading'};
+    composeAttachments.push(item); uploadComposeImage(item);
+  });
+  $('cImages').value='';
+}
+$('cAddImages').addEventListener('click',function(){ $('cImages').click(); });
+$('cImages').addEventListener('change',function(){ addComposeImages(this.files); });
+composeEl.addEventListener('paste',function(e){
+  var items=e.clipboardData && e.clipboardData.items, files=[];
+  if(!items || composeEl.hidden || saving) return;
+  for(var i=0;i<items.length;i++) if(items[i].kind==='file' && items[i].type.indexOf('image/')===0){ var f=items[i].getAsFile(); if(f) files.push(f); }
+  if(files.length){ e.preventDefault(); e.stopImmediatePropagation(); addComposeImages(files); }
+},true);
 function ensureEditor(initial){
   var val=initial||'';
   if(vditor){
@@ -1841,6 +2029,10 @@ function openCompose(id){
   $('cSave').textContent = q? '保存' : '存入';
   cSrc.value = q? q.source : '';
   cUse.value = q? q.use_case : '';
+  cUrl.value = q? q.source_url : '';
+  clearComposeAttachments();
+  composeAttachments=(q?q.attachments:[]).map(function(a){ return {attachment:a,state:'ready'}; });
+  renderComposeAttachments();
   fillUseList();
   ensureEditor(q? q.text : '');          /* 编辑用原始 Markdown */
   setTimeout(function(){ try{ vditor&&vditor.focus(); }catch(e){} },220);
@@ -1849,23 +2041,27 @@ function resetCompose(){
   composeEl.hidden=true; composeEl.setAttribute('aria-hidden','true');
   editingId=null; editingBase=null;
   if(vditor&&vditorReady){ try{ vditor.setValue(''); }catch(e){} }
-  cSrc.value=''; cUse.value='';
+  cSrc.value=''; cUse.value=''; cUrl.value=''; clearComposeAttachments();
 }
 function closeCompose(){
+  if(saving){ status('正在保存，请稍候'); return; }
   resetCompose();
   if(state.back==='poster') showPoster(state.idx,false);
   else showIndex();
 }
 function saveCompose(){
   if(saving) return;
+  if(composeAttachments.some(function(item){return item.state!=='ready';})){ status('请先完成图片上传，或移除失败图片'); return; }
   var text=editorValue().trim();
-  if(!text){ status('还没写内容'); try{ vditor&&vditor.focus(); }catch(e){} return; }
-  var source=cSrc.value.trim(), use_case=cUse.value.trim();
-  saving=true;
+  var attachments=composeAttachments.map(function(item){return item.attachment;});
+  if(!text && !attachments.length){ status('写下内容或添加图片后再保存'); try{ vditor&&vditor.focus(); }catch(e){} return; }
+  var source=cSrc.value.trim(), use_case=cUse.value.trim(), source_url=safeSourceUrl(cUrl.value.trim());
+  if(cUrl.value.trim() && !source_url){ status('链接需要使用有效的 https:// 地址'); cUrl.focus(); return; }
+  saving=true; updateComposeSave();
   if(editingId){
     var id=editingId, back=state.back;
     api('/quotes/'+encodeURIComponent(id),{method:'PATCH',
-      body:{text:text,source:source,use_case:use_case,expected_updated_at:editingBase}})
+      body:{text:text,source:source,use_case:use_case,source_url:source_url,attachments:attachments,expected_updated_at:editingBase}})
       .then(function(r){
         if(r.__status===409){
           resetCompose();
@@ -1884,10 +2080,10 @@ function saveCompose(){
         });
       })
       .catch(function(e){ status('保存失败：'+String(e.message||e).slice(0,60)); })
-      .then(function(){ saving=false; });
+      .then(function(){ saving=false; updateComposeSave(); });
     return;
   }
-  api('/quotes/add',{method:'POST',body:{text:text,source:source,use_case:use_case}})
+  api('/quotes/add',{method:'POST',body:{text:text,source:source,use_case:use_case,source_url:source_url,attachments:attachments}})
     .then(function(r){
       if(!r.ok || !r.quote) throw new Error(r.error||('HTTP '+r.__status));
       var nid=r.quote.id, back=state.back;
@@ -1904,7 +2100,7 @@ function saveCompose(){
       });
     })
     .catch(function(e){ status('存入失败：'+String(e.message||e).slice(0,60)); })
-    .then(function(){ saving=false; });
+    .then(function(){ saving=false; updateComposeSave(); });
 }
 $('cCancel').addEventListener('click', closeCompose);
 $('cSave').addEventListener('click', saveCompose);
@@ -2045,6 +2241,8 @@ function typing(e){
   return !!(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable));
 }
 document.addEventListener('keydown', function(e){
+  if(!imageViewer.hidden) return;
+  if(e.target.closest && e.target.closest('#posterImages button') && (e.key==='Enter'||e.key===' ')) return;
   if(e.key==='Escape'){
     if(!helpEl.hidden){ closeHelp(); return; }
     if(!composeEl.hidden){ closeCompose(); return; }

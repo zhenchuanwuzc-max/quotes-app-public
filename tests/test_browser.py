@@ -7,6 +7,8 @@
 缺了就直接失败并提示怎么装；确实要跳过（比如在没装浏览器的机器上只跑接口测试）设 QUOTES_SKIP_BROWSER=1。
 页面发往 127.0.0.1 以外的请求一律拦掉（检查更新等），保证不联网。
 """
+import base64
+import hashlib
 import json
 import os
 import re
@@ -186,6 +188,117 @@ class BrowserUsageTest(ServerTest):
         ids = [q["id"] for q in json.loads(body)["quotes"]]
         self.assertNotIn(qid, ids)
         self.assertEqual(len(ids), len(EX))
+
+
+    def image_fixture(self):
+        # A real PNG, shared between disk seeding and the file-picker flow.
+        return base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
+
+    def seed_image_quote(self, source_url="https://www.youtube.com/watch?v=example&t=42s"):
+        image = self.image_fixture()
+        rel = "attachments/" + hashlib.sha256(image).hexdigest() + ".png"
+        folder = os.path.join(self.srv.data_dir, "attachments")
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(self.srv.data_dir, rel), "wb") as f:
+            f.write(image)
+        data = self.srv.read_file()
+        q = data["quotes"][0]
+        q["text"] = "视频里值得保存的原话"
+        q["attachments"] = [{"path": rel, "mime": "image/png", "alt": "视频截图"}]
+        q["source_url"] = source_url
+        with open(self.srv.data_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        return q
+
+    def test_video_image_thumbnail_detail_and_return_link(self):
+        q = self.seed_image_quote()
+        self.open_app()
+        row = self.row_with("视频里值得保存的原话")
+        thumbnail = row.locator(".row-media img")
+        thumbnail.wait_for(state="visible")
+        self.assertEqual(thumbnail.get_attribute("loading"), "lazy")
+        row.click()
+        self.page.locator("#posterImages img").wait_for(state="visible")
+        self.assertEqual(self.page.locator("#sourceLink").get_attribute("href"), q["source_url"])
+        self.assertEqual(self.page.locator("#sourceLink").get_attribute("rel"), "noopener noreferrer")
+        self.page.locator("#posterImages button").click()
+        self.page.locator("#imageViewer").wait_for(state="visible")
+        self.page.wait_for_function("() => document.querySelector('#imageViewer img').naturalWidth > 0")
+        self.page.keyboard.press("Escape")
+        self.page.locator("#imageViewer").wait_for(state="hidden")
+        self.assertTrue(self.page.locator("#app").is_visible(), "关图应留在原条目，而非跳回目录")
+        self.page.locator("#posterImages button").focus()
+        self.page.keyboard.press("Space")
+        self.page.locator("#imageViewer").wait_for(state="visible")
+        self.assertEqual(self.page.evaluate("location.hash"), "#/q/" + q["id"], "键盘看图不应触发海报翻页")
+        self.page.locator("#imageClose").click()
+        self.page.locator("#btnBack").click()
+        self.assertTrue(self.page.locator("#index").is_visible())
+
+    def test_upload_image_only_edit_preserve_and_remove(self):
+        self.open_app()
+        self.page.locator("#btnNew").click()
+        self.page.locator("#cedit .vditor-ir .vditor-reset").wait_for(state="visible")
+        self.page.locator("#cImages").set_input_files({
+            "name": "课程截图.png", "mimeType": "image/png", "buffer": self.image_fixture(),
+        })
+        self.page.locator("#cAttachments .attachment-ready").wait_for()
+        self.page.locator("#cSrc").fill("图片测试来源")
+        self.page.locator("#cSave").click()
+        self.page.locator("#compose").wait_for(state="hidden")
+        self.page.wait_for_function("n => document.querySelectorAll('#list .row').length === n", arg=len(EX)+1)
+        quote = next(q for q in self.list_all() if q["source"] == "图片测试来源")
+        self.assertEqual(quote["text"], "")
+        self.assertEqual(len(quote["attachments"]), 1)
+        row = self.row_with("图片测试来源")
+        row.locator(".row-media img").wait_for(state="visible")
+        row.click()
+        self.assertTrue(self.page.locator("#btnWall").is_disabled(), "只有图片时不能生成空白文字壁纸")
+        self.page.locator("#btnEdit").click()
+        self.page.locator("#cAttachments .attachment-ready").wait_for()
+        self.page.locator("#cSrc").fill("图片编辑后来源")
+        self.page.locator("#cSave").click()
+        self.page.locator("#compose").wait_for(state="hidden")
+        self.assertEqual(len(self.find(quote["id"])["attachments"]), 1)
+        self.page.locator("#btnEdit").click()
+        editor = self.page.locator("#cedit .vditor-ir .vditor-reset")
+        editor.click()
+        self.page.keyboard.type("移除图片后保留正文")
+        self.page.locator("#cAttachments button[aria-label='移除图片']").click()
+        self.page.locator("#cSave").click()
+        self.page.locator("#compose").wait_for(state="hidden")
+        self.assertEqual(self.find(quote["id"])["attachments"], [])
+        self.assertTrue(self.page.locator("#posterImages").is_hidden())
+
+    def test_failed_image_upload_can_retry_without_losing_draft(self):
+        self.open_app()
+        self.page.locator("#btnNew").click()
+        editor = self.page.locator("#cedit .vditor-ir .vditor-reset")
+        editor.wait_for(state="visible")
+        editor.click()
+        self.page.keyboard.type("上传失败也要保留的草稿")
+        self.page.route("**/attachments", lambda route: route.fulfill(
+            status=503, content_type="application/json", body='{"error":"temporary upload failure"}'))
+        self.page.locator("#cImages").set_input_files({
+            "name": "截图.png", "mimeType": "image/png", "buffer": self.image_fixture(),
+        })
+        self.page.locator("#cAttachments button", has_text="重试").wait_for(state="visible")
+        self.assertTrue(self.page.locator("#cSave").is_disabled())
+        self.assertIn("上传失败也要保留的草稿", editor.text_content())
+        self.page.unroute("**/attachments")
+        self.page.locator("#cAttachments button", has_text="重试").click()
+        self.page.locator("#cAttachments .attachment-ready").wait_for()
+        self.assertFalse(self.page.locator("#cSave").is_disabled())
+        self.page.locator("#cSave").click()
+        self.page.locator("#compose").wait_for(state="hidden")
+        quote = next(q for q in self.list_all() if q["text"] == "上传失败也要保留的草稿")
+        self.assertEqual(len(quote["attachments"]), 1)
+
+    def test_untrusted_source_url_is_not_linked(self):
+        self.seed_image_quote(source_url="javascript:alert(1)")
+        self.open_app()
+        self.row_with("视频里值得保存的原话").click()
+        self.assertTrue(self.page.locator("#sourceLink").is_hidden())
 
 
 if __name__ == "__main__":
