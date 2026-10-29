@@ -4,7 +4,8 @@ quotes-app 本地 HTTP 服务（v0.1.0：JSON-as-truth + git 同步，弃 SQLite
 
 - GET    /              → 返回 index.html
 - GET    /quotes?q=&offset=&limit=  → 内存 filter 检索 text/source/use_case；分页
-- POST   /quotes/add    → 单条写入 {text, source?, use_case?}
+- POST   /quotes/add    → 单条写入 {text, source?, use_case?, attachments?, source_url?, capture_id?}
+- POST   /attachments   → 验证并保存 PNG/JPEG/WebP；GET /attachments/<sha256>.<ext> 读取
 - DELETE /quotes/<id>   → 删一条（从数组移除；跨机删除靠 git base-diff，无 tombstone）
 - PATCH  /quotes/<id>     → 编辑正文 {text, source?, use_case?, expected_updated_at?}（CAS 防 stale write）
 - PATCH  /quotes/<id>/pin → 切换收藏置顶 {pinned: bool}
@@ -15,7 +16,7 @@ quotes-app 本地 HTTP 服务（v0.1.0：JSON-as-truth + git 同步，弃 SQLite
 数据：~/quotes-data/quotes.json（单 JSON 对象，本地真库，git 仓根；不进 iCloud）
   格式：{"updated": ISO, "quotes": [{id,text,source,use_case,created_at,updated_at,pinned,pinned_at}]}
   可变字段（推翻原 append-only 设计）：
-    - 正文原子组 {text,source,use_case,updated_at}：编辑走 updated_at LWW（整组覆盖，禁逐字段拼）
+    - 正文原子组 {text,source,use_case,attachments,source_url,updated_at}：编辑走 updated_at LWW（整组覆盖，禁逐字段拼）
     - pin 原子组 {pinned,pinned_at}：独立走 pinned_at LWW
     两组在 json-merge.py 解耦合并。历史条目无 updated_at → 一律按 created_at 兜底。
     🔴 严禁一次性迁移脚本批量补 updated_at——会让所有历史条目 o!=bse，删除传播全局瘫痪。
@@ -25,6 +26,10 @@ quotes-app 本地 HTTP 服务（v0.1.0：JSON-as-truth + git 同步，弃 SQLite
 范式来源：~/daily-todo/server.py（_atomic_write + 锁内 read-modify-write + schedule_sync 5s debounce）
 """
 import base64
+import binascii
+import hashlib
+import re
+import stat
 import json
 import os
 import shutil
@@ -58,6 +63,12 @@ if not DATA_DIR:
         DATA_DIR = "~/quotes-data"
 DATA_DIR = os.path.expanduser(DATA_DIR)
 DATA_FILE = os.path.join(DATA_DIR, "quotes.json")
+MAX_IMAGE_BYTES = 4 * 1024 * 1024
+MAX_JSON_BYTES = 24 * 1024 * 1024
+MAX_ATTACHMENTS = 4
+_ATTACHMENT_NAME = re.compile(r"^([a-f0-9]{64})\.(png|jpg|webp)$")
+_IMAGE_MIMES = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}
+_UNSET = object()
 
 # 备份路径（进 iCloud，跨机/误删恢复用）—— 与 git 历史互补的第二道保险
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -472,30 +483,152 @@ def _run_sync(sync_sh: str) -> None:
 
 # ============== 业务操作（锁内 read-modify-write）==============
 
-def add_quote(text: str, source: str = "", use_case: str = "") -> dict:
-    """写入一条金句，返回完整记录。锁内 read-append-write，复用 _atomic_write。"""
-    text = (text or "").strip()
-    if not text:
-        raise ValueError("text 不能为空")
-    source = (source or "").strip()
-    use_case = (use_case or "").strip()
+def _string(value, label):
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ValueError(f"{label} 必须为文本")
+    return value.strip()
+
+
+def _source_url(value):
+    value = _string(value, "source_url")
+    parsed = urlparse(value)
+    if value and (len(value) > 4096 or parsed.scheme != "https" or not parsed.hostname
+                  or parsed.username is not None or any(ord(c) < 32 for c in value)):
+        raise ValueError("source_url 必须是有效的 HTTPS 链接")
+    return value
+
+
+def _attachment_directory(create=False):
+    root = os.path.join(DATA_DIR, "attachments")
+    try:
+        if create:
+            os.makedirs(DATA_DIR, exist_ok=True)
+            try:
+                os.mkdir(root, 0o700)
+            except FileExistsError:
+                pass
+        return os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as exc:
+        raise ValueError("附件目录不可用") from exc
+
+
+def _read_attachment(name):
+    match = _ATTACHMENT_NAME.fullmatch(name)
+    if not match:
+        raise ValueError("附件路径无效")
+    root_fd = _attachment_directory()
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root_fd)
+        with os.fdopen(fd, "rb") as f:
+            info = os.fstat(f.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_IMAGE_BYTES:
+                raise ValueError("附件文件无效")
+            data = f.read(MAX_IMAGE_BYTES + 1)
+        if hashlib.sha256(data).hexdigest() != match[1]:
+            raise ValueError("附件内容与校验值不符")
+        return data, _IMAGE_MIMES[match[2]]
+    except OSError as exc:
+        raise ValueError("附件不存在或不可访问") from exc
+    finally:
+        os.close(root_fd)
+
+
+def upload_attachment(data_url, name=""):
+    if not isinstance(data_url, str) or len(data_url) > ((MAX_IMAGE_BYTES + 2) // 3) * 4 + 80:
+        raise ValueError("单张图片不能超过 4 MiB")
+    match = re.fullmatch(r"data:(image/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)", data_url)
+    if not match:
+        raise ValueError("只支持 PNG、JPEG、WebP 的 base64 图片")
+    mime = match[1]
+    try:
+        data = base64.b64decode(match[2], validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("图片 base64 无效") from exc
+    if not data or len(data) > MAX_IMAGE_BYTES:
+        raise ValueError("单张图片不能超过 4 MiB")
+    valid = ((mime == "image/png" and data.startswith(b"\x89PNG\r\n\x1a\n") and data.endswith(b"IEND\xaeB`\x82"))
+             or (mime == "image/jpeg" and data.startswith(b"\xff\xd8\xff") and data.endswith(b"\xff\xd9"))
+             or (mime == "image/webp" and len(data) >= 16 and data[:4] == b"RIFF"
+                 and data[8:12] == b"WEBP" and int.from_bytes(data[4:8], "little") + 8 == len(data)))
+    if not valid:
+        raise ValueError("图片格式与内容不符")
+    ext = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}[mime]
+    filename = hashlib.sha256(data).hexdigest() + "." + ext
+    alt = _string(name, "name")[:300]
+    root_fd = _attachment_directory(create=True)
+    temporary = ".upload-" + uuid.uuid4().hex
+    try:
+        try:
+            existing = os.stat(filename, dir_fd=root_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            existing = None
+        if existing is not None and not stat.S_ISREG(existing.st_mode):
+            raise ValueError("附件文件不可访问")
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=root_fd)
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, filename, src_dir_fd=root_fd, dst_dir_fd=root_fd)
+    finally:
+        try:
+            os.unlink(temporary, dir_fd=root_fd)
+        except FileNotFoundError:
+            pass
+        os.close(root_fd)
+    return {"path": "attachments/" + filename, "mime": mime, "alt": alt}
+
+
+def _attachments(value):
+    if not isinstance(value, list) or len(value) > MAX_ATTACHMENTS:
+        raise ValueError("每条金句最多 4 张图片")
+    result = []
+    for attachment in value:
+        if not isinstance(attachment, dict):
+            raise ValueError("附件引用无效")
+        relative = attachment.get("path", "")
+        if not isinstance(relative, str) or not relative.startswith("attachments/"):
+            raise ValueError("附件路径无效")
+        filename = relative[len("attachments/"):]
+        _, mime = _read_attachment(filename)
+        if attachment.get("mime") != mime:
+            raise ValueError("附件类型无效")
+        result.append({"path": relative, "mime": mime, "alt": _string(attachment.get("alt", ""), "alt")[:300]})
+    return result
+
+
+def add_quote(text: str, source: str = "", use_case: str = "", *, attachments=None,
+              source_url="", capture_id="") -> tuple:
+    """同一 capture_id 的重试在写锁内去重，返回 (quote, deduplicated)。"""
+    text, source, use_case = (_string(v, label) for v, label in
+                              ((text, "text"), (source, "source"), (use_case, "use_case")))
+    images = _attachments(attachments if attachments is not None else [])
+    if not text and not images:
+        raise ValueError("正文和图片不能同时为空")
+    source_url = _source_url(source_url)
+    capture_id = _string(capture_id, "capture_id")
+    if len(capture_id) > 256 or any(ord(c) < 32 for c in capture_id):
+        raise ValueError("capture_id 无效")
     ts = now_iso()
     quote = {
-        "id": str(uuid.uuid4()),
-        "text": text,
-        "source": source,
-        "use_case": use_case,
-        "created_at": ts,
-        "updated_at": ts,  # 新增即等于 created_at；编辑时刷新，走正文 LWW
-        "pinned": False,
-        "pinned_at": None,
+        "id": str(uuid.uuid4()), "text": text, "source": source, "use_case": use_case,
+        "created_at": ts, "updated_at": ts, "pinned": False, "pinned_at": None,
+        "attachments": images, "source_url": source_url,
     }
+    if capture_id:
+        quote["capture_id"] = capture_id
     with _write_lock:
         data = read_data()
+        if capture_id:
+            previous = next((q for q in data["quotes"] if q.get("capture_id") == capture_id), None)
+            if previous is not None:
+                return previous, True
         data["quotes"].append(quote)
         _atomic_write(data)
     schedule_sync()
-    return quote
+    return quote, False
 
 
 def delete_quote(qid: str) -> bool:
@@ -540,15 +673,15 @@ class StaleEditError(Exception):
 
 
 def edit_quote(qid: str, text: str, source: str = "", use_case: str = "",
-               expected_updated_at=None) -> dict:
-    """编辑正文原子组 {text,source,use_case,updated_at}，刷新 updated_at 走 LWW。
+               expected_updated_at=None, *, attachments=_UNSET, source_url=_UNSET) -> dict:
+    """编辑正文原子组 {text,source,use_case,attachments,source_url,updated_at}，刷新 updated_at 走 LWW。
     不动 created_at / pinned / pinned_at（与 pin 原子组解耦）。
     expected_updated_at 非 None 时做 CAS：与库内当前值不符则抛 StaleEditError（防 stale write）。"""
-    text = (text or "").strip()
-    if not text:
-        raise ValueError("text 不能为空")
-    source = (source or "").strip()
-    use_case = (use_case or "").strip()
+    text = _string(text, "text")
+    source = _string(source, "source")
+    use_case = _string(use_case, "use_case")
+    images = _attachments(attachments) if attachments is not _UNSET else _UNSET
+    link = _source_url(source_url) if source_url is not _UNSET else _UNSET
     with _write_lock:
         data = read_data()
         target = None
@@ -563,6 +696,12 @@ def edit_quote(qid: str, text: str, source: str = "", use_case: str = "",
             cur = target.get("updated_at") or target.get("created_at") or ""
             if str(expected_updated_at) != str(cur):
                 raise StaleEditError(cur)
+        if not text and not (images if images is not _UNSET else target.get("attachments")):
+            raise ValueError("正文和图片不能同时为空")
+        if images is not _UNSET:
+            target["attachments"] = images
+        if link is not _UNSET:
+            target["source_url"] = link
         target["text"] = text
         target["source"] = source
         target["use_case"] = use_case
@@ -604,14 +743,39 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", f"{ctype}; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         if isinstance(body, str):
             body = body.encode("utf-8")
         self.wfile.write(body)
 
+    def _json_body(self):
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length < 0:
+                raise ValueError("invalid Content-Length")
+            if length > MAX_JSON_BYTES:
+                self.close_connection = True
+                self._send(413, json.dumps({"error": "JSON 请求不能超过 24 MiB"}, ensure_ascii=False))
+                return None
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("JSON body must be an object")
+            return payload
+        except (ValueError, UnicodeDecodeError) as exc:
+            self._send(400, json.dumps({"error": str(exc)}))
+            return None
+
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/attachments/"):
+            try:
+                data, mime = _read_attachment(parsed.path[len("/attachments/"):])
+                self._send(200, data, mime)
+            except ValueError:
+                self._send(404, json.dumps({"error": "attachment not found"}))
+            return
         if parsed.path in ("/", "/index.html"):
             self._send(200, INDEX_HTML, "text/html")
             return
@@ -688,22 +852,22 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):
-        if self.path == "/quotes/add":
-            length = int(self.headers.get("Content-Length", 0))
-            try:
-                payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            except Exception as e:
-                self._send(400, json.dumps({"error": f"invalid json: {e}"}))
+        if self.path in ("/attachments", "/quotes/add"):
+            payload = self._json_body()
+            if payload is None:
                 return
             try:
-                quote = add_quote(
-                    text=payload.get("text", ""),
-                    source=payload.get("source", ""),
-                    use_case=payload.get("use_case", ""),
+                if self.path == "/attachments":
+                    attachment = upload_attachment(payload.get("data_url"), payload.get("name", ""))
+                    self._send(200, json.dumps({"ok": True, "attachment": attachment}, ensure_ascii=False))
+                    return
+                quote, deduplicated = add_quote(
+                    text=payload.get("text", ""), source=payload.get("source", ""),
+                    use_case=payload.get("use_case", ""), attachments=payload.get("attachments", []),
+                    source_url=payload.get("source_url", ""), capture_id=payload.get("capture_id", ""),
                 )
-                self._send(200, json.dumps({
-                    "ok": True, "quote": quote, "total": count_quotes(),
-                }, ensure_ascii=False))
+                self._send(200, json.dumps({"ok": True, "quote": quote, "total": count_quotes(),
+                                           "deduplicated": deduplicated}, ensure_ascii=False))
             except ValueError as e:
                 self._send(400, json.dumps({"error": str(e)}))
             except Exception as e:
@@ -779,11 +943,11 @@ class Handler(BaseHTTPRequestHandler):
         parts = parsed.path.strip("/").split("/")
         if len(parts) == 2 and parts[0] == "quotes":
             qid = parts[1]
-            length = int(self.headers.get("Content-Length", 0))
-            try:
-                payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            except Exception as e:
-                self._send(400, json.dumps({"error": f"invalid json: {e}"}))
+            payload = self._json_body()
+            if payload is None:
+                return
+            if "capture_id" in payload:
+                self._send(400, json.dumps({"error": "capture_id 不能编辑"}, ensure_ascii=False))
                 return
             try:
                 quote = edit_quote(
@@ -792,6 +956,8 @@ class Handler(BaseHTTPRequestHandler):
                     source=payload.get("source", ""),
                     use_case=payload.get("use_case", ""),
                     expected_updated_at=payload.get("expected_updated_at"),
+                    attachments=payload.get("attachments", _UNSET),
+                    source_url=payload.get("source_url", _UNSET),
                 )
                 self._send(200, json.dumps({"ok": True, "quote": quote}, ensure_ascii=False))
             except StaleEditError as e:

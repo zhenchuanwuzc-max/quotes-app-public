@@ -146,6 +146,29 @@ class MergeDriverTest(TimeLimitedTest):
         self.assertTrue(got["pinned"])
         self.assertEqual(got["pinned_at"], ts(6))
 
+    def test_attachment_only_concurrent_edits_converge_with_content_group(self):
+        base_quote = quote("s1", "same text")
+        a = dict(base_quote, attachments=[{"path": "attachments/" + "a" * 64 + ".png", "mime": "image/png", "alt": "A"}],
+                 source_url="https://www.youtube.com/watch?v=a", capture_id="capture-1")
+        b = dict(base_quote, attachments=[{"path": "attachments/" + "b" * 64 + ".jpg", "mime": "image/jpeg", "alt": "B"}],
+                 source_url="https://www.youtube.com/watch?v=b", capture_id="capture-1")
+        merged = self.merge_both_ways(doc(base_quote), doc(a), doc(b))
+        got = by_id(merged)["s1"]
+        self.assertIn(got, [a, b], "attachments and source URL must stay with the same content edit")
+        self.assertEqual(got["capture_id"], "capture-1")
+
+    def test_newer_image_edit_and_independent_pin_both_survive(self):
+        base_quote = quote("s1", "old")
+        edited = dict(quote("s1", "with image", updated=ts(5)),
+                      attachments=[{"path": "attachments/" + "c" * 64 + ".png", "mime": "image/png", "alt": "new"}],
+                      source_url="https://www.bilibili.com/video/BVexample", capture_id="capture-2")
+        pinned = dict(base_quote, pinned=True, pinned_at=ts(6))
+        got = by_id(self.merge_both_ways(doc(base_quote), doc(edited), doc(pinned)))["s1"]
+        self.assertEqual(got["attachments"], edited["attachments"])
+        self.assertEqual(got["source_url"], edited["source_url"])
+        self.assertEqual(got["text"], "with image")
+        self.assertTrue(got["pinned"])
+
     # ---- 置顶 ----
     def test_later_unpin_beats_earlier_pin(self):
         base = doc(quote("s1", pinned=True, pinned_at=ts(2)))

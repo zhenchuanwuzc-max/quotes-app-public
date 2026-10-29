@@ -5,7 +5,7 @@ git merge driver —— quotes.json 的 JSON-aware union 合并
 改自 ~/daily-todo/json-merge.py（同款范式）。关键差异：
   - tasks → quotes
   - 同 id 合并：**两个解耦的原子组各自 LWW，再组装**（推翻原 append-only）
-      * 正文原子组 {text,source,use_case,updated_at}：按 updated_at(兜底 created_at) 晚的整组取
+      * 正文原子组 {text,source,use_case,attachments,source_url,updated_at}：按 updated_at(兜底 created_at) 晚的整组取
         —— 🔴 整组覆盖，禁逐字段拼（A改text+B改source 逐字段拼会产出错乱数据）
       * pin 原子组 {pinned,pinned_at}：独立按 pinned_at 晚的取
       * updated_at 相等时按正文内容字典序 tie-break（保双机反向 merge 收敛同状态）
@@ -85,7 +85,7 @@ def _content_recency(q):
 
 def merge_same(a, b):
     """同 id 两条合并：两个解耦原子组各自 LWW 后组装。
-    - 正文原子组 {text,source,use_case,updated_at}：按 _content_recency 晚的整组取
+    - 正文原子组 {text,source,use_case,attachments,source_url,updated_at}：按 _content_recency 晚的整组取
       （updated_at 相等 → 按 id 字典序 tie-break，保双机反向 merge 收敛同状态）
     - pin 原子组 {pinned,pinned_at}：独立按 pinned_at 晚的取
     解耦后：改正文不覆盖另一机刚 pin 的状态。所有比较前 or "" 兜底防 None 异类型崩。"""
@@ -96,8 +96,12 @@ def merge_same(a, b):
     else:
         # tie：updated_at 相等（同 id，id 无法区分），按正文内容字典序确定取一侧
         # —— 保证双机反向 merge 收敛到同一结果（交换律），破解 >= 非确定性
-        ka = (a.get("text") or "", a.get("source") or "", a.get("use_case") or "")
-        kb = (b.get("text") or "", b.get("source") or "", b.get("use_case") or "")
+        def content_key(q):
+            return (q.get("text") or "", q.get("source") or "", q.get("use_case") or "",
+                    q.get("source_url") or "",
+                    json.dumps(q.get("attachments") or [], sort_keys=True, ensure_ascii=False),
+                    q.get("capture_id") or "")
+        ka, kb = content_key(a), content_key(b)
         content_src = a if ka <= kb else b
     # pin 原子组：独立按 pinned_at LWW
     pa, pb = (a.get("pinned_at") or ""), (b.get("pinned_at") or "")

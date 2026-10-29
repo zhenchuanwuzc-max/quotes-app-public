@@ -12,8 +12,7 @@
 #   - 上线 = 当前提交；工作区有未提交改动就拒绝上线（否则线上跑的东西对不上任何提交，也没法回滚）
 #   - 回滚 = 当前提交另存成分支 release-failed/<时间> → git reset --hard 到上一次上线成功的提交
 #     （记在 .git/quotes-release-ok；没有记录时用 HEAD~1）→ 重启 → 再验活
-#   - 合并驱动 json-merge.py 真正生效的是数据仓 ~/quotes-data 里那份（git 调的是它，sync.sh 会把它
-#     提交并推给其他电脑）。上线时与代码仓不一致就覆盖过去，回滚时还原。
+#   - 数据仓里的 json-merge.py / sync.sh 在上线时一起更新，回滚时一起还原；附件随数据仓同步。
 #
 # 演练回滚：QUOTES_RELEASE_SIMULATE_FAIL=1 scripts/release.sh（线上检查强制判失败，走完整回滚流程）
 set -euo pipefail
@@ -50,10 +49,29 @@ until mkdir "$LOCK" 2>/dev/null; do
     echo "… 另一次上线在跑，排队等它"; sleep 5
 done
 TEST_LOG="$(mktemp -t quotes-release-test)"
-trap 'rm -f "$TEST_LOG"; rmdir "$LOCK" 2>/dev/null || true' EXIT
+DATA_CODE_BAK=""
+KEEP_DATA_CODE=0
+restore_data_code() {
+    [ -n "$DATA_CODE_BAK" ] || return 0
+    for name in json-merge.py sync.sh; do
+        if [ -f "$DATA_CODE_BAK/$name" ]; then
+            cp -p "$DATA_CODE_BAK/$name" "$DATA_DIR/.$name.release-$$"
+            mv -f "$DATA_DIR/.$name.release-$$" "$DATA_DIR/$name"
+        elif [ -f "$DATA_CODE_BAK/$name.absent" ]; then
+            rm -f "$DATA_DIR/$name"
+        fi
+    done
+}
+cleanup_release() {
+    [ "$KEEP_DATA_CODE" = 1 ] || restore_data_code
+    [ -z "$DATA_CODE_BAK" ] || rm -rf "$DATA_CODE_BAK"
+    rm -f "$TEST_LOG"
+    rmdir "$LOCK" 2>/dev/null || true
+}
+trap cleanup_release EXIT
 
 # ── ① 跑全部测试 ─────────────────────────────────────
-echo "▶ 跑测试（$PY）"
+echo "▶ 跑测试（${PY}）"
 if ! "$PY" -m unittest discover -s tests -v >"$TEST_LOG" 2>&1; then
     cat "$TEST_LOG"
     echo "" >&2
@@ -65,7 +83,7 @@ N="$(sed -n 's/^Ran \([0-9][0-9]*\) tests\{0,1\} in \(.*\)$/\1/p' "$TEST_LOG" | 
 T="$(sed -n 's/^Ran [0-9][0-9]* tests\{0,1\} in \(.*\)$/\1/p' "$TEST_LOG" | tail -1)"
 SKIPPED="$(grep -c '\.\.\. skipped' "$TEST_LOG" || true)"
 SUMMARY="${N:-?} 项全过（测试 ${T:-?}）"
-[ "${SKIPPED:-0}" -gt 0 ] && SUMMARY="$SUMMARY，其中 ${SKIPPED} 项跳过"
+[ "${SKIPPED:-0}" -gt 0 ] && SUMMARY="${SUMMARY}，其中 ${SKIPPED} 项跳过"
 
 if [ "$NO_RESTART" = 1 ]; then
     echo ""
@@ -95,8 +113,8 @@ PORT="${PORT:-8767}"
 BASE="http://127.0.0.1:$PORT"
 TARGET="gui/$(id -u)/$LABEL"
 if ! launchctl print "$TARGET" >/dev/null 2>&1; then
-    echo "✗ launchd 里没有 $LABEL（没装？先跑 install.sh）" >&2
-    notify "launchd 里没有 $LABEL，没上线"
+    echo "✗ launchd 里没有 ${LABEL}（没装？先跑 install.sh）" >&2
+    notify "launchd 里没有 ${LABEL}，没上线"
     exit 1
 fi
 
@@ -123,18 +141,23 @@ restart_and_probe() {
     return 1
 }
 
-# ── ③ 装合并驱动到数据仓 ─────────────────────────────
-DRIVER_BAK=""
-if [ -f "$DATA_DIR/json-merge.py" ] && ! cmp -s "$ROOT/json-merge.py" "$DATA_DIR/json-merge.py"; then
-    DRIVER_BAK="$(mktemp -t quotes-json-merge)"
-    cp -p "$DATA_DIR/json-merge.py" "$DRIVER_BAK"
-    cp "$ROOT/json-merge.py" "$DATA_DIR/json-merge.py"
-    chmod +x "$DATA_DIR/json-merge.py"
-    echo "▶ 合并驱动已更新到 $DATA_DIR/json-merge.py（下次同步会推给其他电脑）"
-fi
+# ── ③ 原子安装数据仓的合并驱动与同步脚本，任一步失败都恢复旧版 ──
+DATA_CODE_BAK="$(mktemp -d -t quotes-data-code)"
+for name in json-merge.py sync.sh; do
+    if cmp -s "$ROOT/$name" "$DATA_DIR/$name"; then continue; fi
+    if [ -f "$DATA_DIR/$name" ]; then
+        cp -p "$DATA_DIR/$name" "$DATA_CODE_BAK/$name"
+    else
+        touch "$DATA_CODE_BAK/$name.absent"
+    fi
+    cp "$ROOT/$name" "$DATA_DIR/.$name.release-$$"
+    chmod +x "$DATA_DIR/.$name.release-$$"
+    mv -f "$DATA_DIR/.$name.release-$$" "$DATA_DIR/$name"
+    echo "▶ 数据脚本已更新：${name}（下次同步会推给其他电脑）"
+done
 
 # ── ④ 重启 + 验活 + 线上只读浏览器检查 ─────────────────
-echo "▶ 重启 $LABEL（$(git_ log --oneline -1)，端口 $PORT）"
+echo "▶ 重启 ${LABEL}（$(git_ log --oneline -1)，端口 ${PORT}）"
 FAIL=""
 if ! restart_and_probe; then
     FAIL="重启后 10 秒内首页/列表接口不通"
@@ -149,7 +172,7 @@ fi
 
 if [ -z "$FAIL" ]; then
     echo "$HEAD_SHA" > "$OK_FILE"
-    [ -n "$DRIVER_BAK" ] && rm -f "$DRIVER_BAK"
+    KEEP_DATA_CODE=1
     echo ""
     echo "✓ ${SUMMARY}；已上线并验活（$(git_ log --oneline -1)，pid=$(service_pid)），总耗时 $((SECONDS - START)) 秒"
     exit 0
@@ -158,23 +181,22 @@ fi
 # ── ⑤ 回滚 ───────────────────────────────────────────
 echo "✗ $FAIL" >&2
 if [ -z "$PREV" ]; then
+    KEEP_DATA_CODE=1
     echo "✗ 没有上一个提交可退，线上停在当前版本。看日志：tail -30 ~/Library/Logs/quotes-app.err.log" >&2
-    notify "$FAIL，且没有可退回的版本"
+    notify "${FAIL}，且没有可退回的版本"
     exit 1
 fi
 SAVED="release-failed/$(date '+%Y%m%d-%H%M%S')"
 git_ branch -f "$SAVED" "$HEAD_SHA"
 git_ reset -q --hard "$PREV"
-if [ -n "$DRIVER_BAK" ]; then
-    cp -p "$DRIVER_BAK" "$DATA_DIR/json-merge.py"
-    rm -f "$DRIVER_BAK"
-fi
-echo "▶ 已退回 $(git_ log --oneline -1) ${PREV_NOTE}；没上成的版本存在分支 $SAVED（git reset --hard $SAVED 可取回）"
+restore_data_code
+KEEP_DATA_CODE=1
+echo "▶ 已退回 $(git_ log --oneline -1) ${PREV_NOTE}；没上成的版本存在分支 ${SAVED}（git reset --hard $SAVED 可取回）"
 if restart_and_probe; then
-    notify "$FAIL，已退回上一版 $(git_ rev-parse --short HEAD)"
+    notify "${FAIL}，已退回上一版 $(git_ rev-parse --short HEAD)"
     echo "✗ 上线失败，已自动退回上一版，线上服务正常。看日志：tail -30 ~/Library/Logs/quotes-app.err.log" >&2
 else
-    notify "$FAIL；退回上一版后服务仍不通，需要人工处理"
+    notify "${FAIL}；退回上一版后服务仍不通，需要人工处理"
     echo "✗ 退回上一版后服务仍不通，需要人工处理：tail -30 ~/Library/Logs/quotes-app.err.log" >&2
 fi
 exit 1
