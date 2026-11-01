@@ -312,7 +312,7 @@ mark{background:none;color:var(--ink);font-weight:700}
   --hair:rgba(18,18,18,.22);--mute:rgba(18,18,18,.5);
 }
 #compose .chead{height:var(--bar);flex:none;display:flex;align-items:center;gap:14px;padding:0 var(--gut);border-bottom:1px solid var(--ink)}
-#compose .cbody{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:clamp(14px,2.4vh,28px) var(--gut) clamp(12px,2vh,22px)}
+#compose .cbody{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;width:100%;max-width:1040px;margin-inline:auto;padding:clamp(14px,2.4vh,28px) var(--gut) clamp(12px,2vh,22px)}
 #cbox{flex:1 1 auto;min-height:0;position:relative;display:flex;flex-direction:column}
 #cedit{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
 
@@ -354,7 +354,7 @@ mark{background:none;color:var(--ink);font-weight:700}
 #cbox .vditor-toolbar__divider{border-left:1px solid var(--rule)}
 #cbox .vditor-content{flex:1 1 auto;min-height:0;border-radius:0!important}
 #cbox .vditor-reset{font-family:var(--font)!important;font-size:16px!important;line-height:1.72!important;color:var(--ink)!important;word-break:break-word}
-#cbox .vditor-ir pre.vditor-reset{padding:14px 2px!important;background:transparent!important}
+#cbox .vditor-ir pre.vditor-reset{padding:14px clamp(14px,2vw,24px)!important;background:transparent!important}
 #cbox .vditor-reset blockquote{border-left:2px solid var(--hair)!important;color:rgba(18,18,18,.55)!important}
 #cbox .vditor-reset h1,#cbox .vditor-reset h2,#cbox .vditor-reset h3,
 #cbox .vditor-reset h4,#cbox .vditor-reset h5,#cbox .vditor-reset h6{border-bottom:0!important;font-weight:700}
