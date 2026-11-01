@@ -1060,6 +1060,7 @@ function setCur(i,scroll){
 
 /* ================= render: poster ================= */
 var posterMarkdown=Lute.New();
+posterMarkdown.SetProtyleWYSIWYG(true);
 posterMarkdown.SetSanitize(true);
 posterMarkdown.SetHeadingID(false);
 posterMarkdown.SetSoftBreak2HardBreak(true);
@@ -1852,6 +1853,7 @@ function ensureEditor(initial){
     counter:{enable:false},
     input:function(){ if(headingFeedback) headingFeedback.schedule(); },
     after:function(){
+      vditor.vditor.lute.SetProtyleWYSIWYG(true);
       vditorReady=true;
       vditor.setValue(vditor.__pending!=null? vditor.__pending : val);
       vditor.__pending=null;
