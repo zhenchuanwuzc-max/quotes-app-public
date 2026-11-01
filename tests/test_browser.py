@@ -330,6 +330,24 @@ class BrowserUsageTest(ServerTest):
         self.page.locator('#compose').wait_for(state='hidden')
         self.assertEqual(self.find(quote['id'])['text'].strip(), quote['text'])
 
+    def test_cjk_bold_punctuation_can_touch_following_text(self):
+        self.seed_text_quote('**强调。**紧接正文\n\n前文**加粗片段，**后文\n\n\\*\\*保留字面星号。\\*\\*\n\n`**代码。**紧接`')
+        self.open_app()
+        self.row_with('紧接正文').click()
+        self.page.locator('#app').wait_for(state='visible')
+        self.assertEqual(self.page.locator('#qt strong').all_text_contents(), ['强调。', '加粗片段，'])
+        self.assertIn('**保留字面星号。**', self.page.locator('#qt').inner_text())
+        self.assertEqual(self.page.locator('#qt code').inner_text(), '**代码。**紧接')
+        self.page.locator('#btnEdit').click()
+        editor = self.page.locator('#cedit .vditor-ir .vditor-reset')
+        editor.wait_for(state='visible')
+        self.assertEqual(editor.locator('strong').count(), 2)
+        self.page.locator('#cSave').click()
+        self.page.locator('#compose').wait_for(state='hidden')
+        self.page.reload()
+        self.page.locator('#qt strong').first.wait_for()
+        self.assertEqual(self.page.locator('#qt strong').all_text_contents(), ['强调。', '加粗片段，'])
+
     def test_markdown_heading_levels_survive_edit_save_and_reload(self):
         text = '\n\n'.join(['开头仍然是普通正文。'] +
                            ['#' * level + ' 层级' + str(level) for level in range(1, 7)] +
