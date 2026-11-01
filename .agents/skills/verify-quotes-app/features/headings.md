@@ -6,6 +6,7 @@
 
 - `heading-body` 普通多段正文使用相同字号并保留句尾标点。
 - `heading-levels` H1–H6 有语义标签及递减字号，编辑保存与重开后保持级别。
+- `heading-size-preview` 正文与六级标题字号不同，编辑和展示按相同层级比例区分，现有标题菜单各项以不同字号预览。
 - `heading-toolbar` 在编辑器选择或修改标题级别。
 - `heading-syntax` Setext 标题、转义井号、代码块与安全 HTML 边界。
 - `heading-scroll` 窄窗口长文可以滚动阅读。
@@ -21,6 +22,7 @@ Preconditions: 使用验证入口创建的隔离样本和随机端口，禁止�
 
 - 运行 `prove-headings.py --evidence <新目录>`，实际脚本位置及完整命令见上层 SKILL.md。脚本复用 tests/test_browser.py 中相关真实浏览器路径，截图和输出保存在指定目录。
 - 检查正文同字号、H1–H6 层级、工具栏从 H2 改为 H3、保存后数据及刷新后的展示。
+- 检查正文与 H6 仍有字号差异；标题菜单的 H1–H6 大小递减，窄窗口中首尾选项都可完整访问。
 - 壁纸路径观察真实 canvas 绘制和发出的 PNG，在浏览器网络边界拦截 `/wallpaper`。不能据此宣称 macOS 已成功设置桌面。
 
 ## Gotchas

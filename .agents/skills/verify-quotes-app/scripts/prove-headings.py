@@ -28,6 +28,7 @@ def main():
     names = [
         'test_plain_paragraphs_are_not_promoted_to_a_title',
         'test_markdown_heading_levels_survive_edit_save_and_reload',
+        'test_heading_sizes_are_distinct_from_body_in_editor_menu_and_display',
         'test_heading_syntax_matches_editor_and_does_not_activate_html',
         'test_long_body_stays_readable_after_window_resize',
         'test_choose_heading_level_in_toolbar_and_change_it',

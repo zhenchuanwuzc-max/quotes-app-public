@@ -22,8 +22,8 @@
   --bar:clamp(48px,6.2vh,62px);
   --hangroom:clamp(6px,1.4vw,20px);
   --btnh:28px;
-  --heading-1:1.9em; --heading-2:1.65em; --heading-3:1.4em;
-  --heading-4:1.22em; --heading-5:1.1em; --heading-6:1em;
+  --heading-1:2.25em; --heading-2:1.875em; --heading-3:1.625em;
+  --heading-4:1.375em; --heading-5:1.25em; --heading-6:1.125em;
   --font:"Helvetica Neue",Helvetica,Arial,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
 }
 html[data-theme="red"]{
@@ -266,12 +266,12 @@ mark{background:none;color:var(--ink);font-weight:700}
 #qt th,#qt td{border:1px solid var(--hair);padding:.3em .6em}
 #qt :is(h1,h2,h3,h4,h5,h6){margin:1em 0 .45em;line-height:1.35;font-weight:700}
 #qt>:first-child{margin-top:0}
-#qt h1,#cbox .vditor-reset h1{font-size:var(--heading-1)!important}
-#qt h2,#cbox .vditor-reset h2{font-size:var(--heading-2)!important}
-#qt h3,#cbox .vditor-reset h3{font-size:var(--heading-3)!important}
-#qt h4,#cbox .vditor-reset h4{font-size:var(--heading-4)!important}
-#qt h5,#cbox .vditor-reset h5{font-size:var(--heading-5)!important}
-#qt h6,#cbox .vditor-reset h6{font-size:var(--heading-6)!important}
+#qt h1,#cbox .vditor-reset h1,#cbox .vditor-hint button[data-tag="h1"]{font-size:var(--heading-1)!important}
+#qt h2,#cbox .vditor-reset h2,#cbox .vditor-hint button[data-tag="h2"]{font-size:var(--heading-2)!important}
+#qt h3,#cbox .vditor-reset h3,#cbox .vditor-hint button[data-tag="h3"]{font-size:var(--heading-3)!important}
+#qt h4,#cbox .vditor-reset h4,#cbox .vditor-hint button[data-tag="h4"]{font-size:var(--heading-4)!important}
+#qt h5,#cbox .vditor-reset h5,#cbox .vditor-hint button[data-tag="h5"]{font-size:var(--heading-5)!important}
+#qt h6,#cbox .vditor-reset h6,#cbox .vditor-hint button[data-tag="h6"]{font-size:var(--heading-6)!important}
 @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 
 .empty-poster{display:flex;flex-direction:column;justify-content:flex-start;height:100%}
@@ -342,9 +342,14 @@ mark{background:none;color:var(--ink);font-weight:700}
 }
 #cbox .vditor-toolbar{border-bottom:1px solid var(--rule)!important;border-radius:0!important;padding:0 2px!important}
 #cbox .vditor-toolbar__item button{border-radius:0!important}
+#cbox button[data-type="headings"]+.vditor-hint{
+  font-size:12px;min-width:260px;max-width:min(300px,calc(100vw - 2 * var(--gut)));
+  max-height:min(70vh,360px);overflow-y:auto;
+}
+#cbox .vditor-hint button[data-tag]{line-height:1.35;font-weight:700;padding:6px 10px}
 #cbox .vditor-toolbar__divider{border-left:1px solid var(--rule)}
 #cbox .vditor-content{flex:1 1 auto;min-height:0;border-radius:0!important}
-#cbox .vditor-reset{font-family:var(--font)!important;font-size:15px!important;line-height:1.72!important;color:var(--ink)!important;word-break:break-word}
+#cbox .vditor-reset{font-family:var(--font)!important;font-size:16px!important;line-height:1.72!important;color:var(--ink)!important;word-break:break-word}
 #cbox .vditor-ir pre.vditor-reset{padding:14px 2px!important;background:transparent!important}
 #cbox .vditor-reset blockquote{border-left:2px solid var(--hair)!important;color:rgba(18,18,18,.55)!important}
 #cbox .vditor-reset h1,#cbox .vditor-reset h2,#cbox .vditor-reset h3,

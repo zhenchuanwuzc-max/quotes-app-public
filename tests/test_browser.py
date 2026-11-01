@@ -376,6 +376,41 @@ class BrowserUsageTest(ServerTest):
         self.assertEqual(self.page.locator('#qt script,#qt iframe,#qt img').count(), 0)
         self.assertFalse(any('example.invalid' in url for url in self.blocked), '展示不应尝试加载外网图片')
 
+    def test_heading_sizes_are_distinct_from_body_in_editor_menu_and_display(self):
+        text = '\n\n'.join(['正文示例'] + ['#' * level + ' 标题' + str(level) for level in range(1, 7)])
+        self.seed_text_quote(text)
+        self.open_app()
+        self.row_with('正文示例').click()
+        self.page.locator('#app').wait_for(state='visible')
+
+        def assert_size_ladder(host):
+            sizes = [host.locator('h' + str(level)).evaluate('(e) => parseFloat(getComputedStyle(e).fontSize)')
+                     for level in range(1, 7)]
+            sizes.append(host.locator('p').first.evaluate('(e) => parseFloat(getComputedStyle(e).fontSize)'))
+            self.assertTrue(all(a > b for a, b in zip(sizes, sizes[1:])), sizes)
+
+        assert_size_ladder(self.page.locator('#qt'))
+        self.page.locator('#btnEdit').click()
+        editor = self.page.locator('#cedit .vditor-ir .vditor-reset')
+        editor.wait_for(state='visible')
+        assert_size_ladder(editor)
+        editor.locator('p').first.click()
+        self.page.wait_for_function('() => !document.querySelector("#cedit button[data-type=headings]").classList.contains("vditor-menu--current")')
+        self.page.locator('#cedit button[data-type="headings"]').click()
+        self.page.locator('#cedit button[data-tag="h1"]').wait_for(state='visible')
+        sizes = [self.page.locator('#cedit button[data-tag="h' + str(level) + '"]').evaluate(
+            '(e) => parseFloat(getComputedStyle(e).fontSize)') for level in range(1, 7)]
+        self.assertTrue(all(a > b for a, b in zip(sizes, sizes[1:])), sizes)
+        self.page.set_viewport_size({'width': 390, 'height': 844})
+        for level in (1, 6):
+            option = self.page.locator('#cedit button[data-tag="h' + str(level) + '"]')
+            option.scroll_into_view_if_needed()
+            box = option.bounding_box()
+            self.assertGreaterEqual(box['x'], 0)
+            self.assertLessEqual(box['x'] + box['width'], 390)
+            self.assertGreaterEqual(box['y'], 0)
+            self.assertLessEqual(box['y'] + box['height'], 844)
+
     def test_long_body_stays_readable_after_window_resize(self):
         text = '\n\n'.join('第%d段正文需要可以滚动阅读。' % i for i in range(1, 81))
         self.seed_text_quote(text)
