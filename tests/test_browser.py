@@ -300,6 +300,187 @@ class BrowserUsageTest(ServerTest):
         self.row_with("视频里值得保存的原话").click()
         self.assertTrue(self.page.locator("#sourceLink").is_hidden())
 
+    def seed_text_quote(self, text):
+        data = self.srv.read_file()
+        quote = data['quotes'][0]
+        quote['text'] = text
+        with open(self.srv.data_file, 'w', encoding='utf-8') as stream:
+            json.dump(data, stream, ensure_ascii=False)
+        return quote
+
+    def test_plain_paragraphs_are_not_promoted_to_a_title(self):
+        first = '第一段是普通正文，应该保持正文大小，也保留句尾标点；'
+        second = '第二段也是普通正文，两段应使用相同的字号，而不是自动变成标题与说明。'
+        quote = self.seed_text_quote(first + '\n\n' + second)
+        self.open_app()
+        self.row_with('第一段是普通正文').click()
+        self.page.locator('#app').wait_for(state='visible')
+        paragraphs = self.page.locator('#qt p')
+        self.assertEqual(paragraphs.count(), 2)
+        self.assertEqual(paragraphs.nth(0).inner_text(), first)
+        self.assertEqual(paragraphs.nth(1).inner_text(), second)
+        sizes = paragraphs.evaluate_all('(els) => els.map(e => parseFloat(getComputedStyle(e).fontSize))')
+        self.assertAlmostEqual(sizes[0], sizes[1], delta=0.1)
+        self.assertLessEqual(max(sizes), 28, '普通正文不能自动放成海报大字')
+        self.page.locator('#btnEdit').click()
+        editor = self.page.locator('#cedit .vditor-ir .vditor-reset')
+        editor.wait_for(state='visible')
+        self.assertEqual(editor.locator('h1,h2,h3,h4,h5,h6').count(), 0)
+        self.page.locator('#cSave').click()
+        self.page.locator('#compose').wait_for(state='hidden')
+        self.assertEqual(self.find(quote['id'])['text'].strip(), quote['text'])
+
+    def test_markdown_heading_levels_survive_edit_save_and_reload(self):
+        text = '\n\n'.join(['开头仍然是普通正文。'] +
+                           ['#' * level + ' 层级' + str(level) for level in range(1, 7)] +
+                           ['末尾正文包含 **加粗内容**。'])
+        quote = self.seed_text_quote(text)
+        self.open_app()
+        self.row_with('开头仍然是普通正文').click()
+        self.page.locator('#app').wait_for(state='visible')
+        for level in range(1, 7):
+            heading = self.page.get_by_role('heading', name='层级' + str(level), exact=True)
+            self.assertEqual(heading.get_attribute('aria-level') or heading.evaluate('(e) => e.tagName[1]'), str(level))
+        sizes = self.page.locator('#qt h1,#qt h2,#qt h3,#qt h4,#qt h5,#qt h6').evaluate_all(
+            '(els) => els.map(e => parseFloat(getComputedStyle(e).fontSize))')
+        self.assertTrue(all(a > b for a, b in zip(sizes, sizes[1:])), sizes)
+        self.assertEqual(self.page.locator('#qt strong').inner_text(), '加粗内容')
+        self.page.locator('#btnEdit').click()
+        editor = self.page.locator('#cedit .vditor-ir .vditor-reset')
+        editor.wait_for(state='visible')
+        for level in range(1, 7):
+            self.assertEqual(editor.locator('h' + str(level)).count(), 1)
+        self.page.locator('#cSave').click()
+        self.page.locator('#compose').wait_for(state='hidden')
+        self.assertEqual(self.find(quote['id'])['text'].strip(), text)
+        self.page.reload()
+        self.page.locator('#qt h6').wait_for(state='visible')
+        for level in range(1, 7):
+            self.assertEqual(self.page.locator('#qt h' + str(level)).inner_text(), '层级' + str(level))
+
+    def test_heading_syntax_matches_editor_and_does_not_activate_html(self):
+        text = ('下划线一级\n======\n\n下划线二级\n------\n\n'
+                '\\# 这是正文\n\n```text\n# 代码里的井号\n```\n\n'
+                '<script>window.quoteInjected = true</script>\n\n'
+                '<img src="https://example.invalid/tracker.png" onerror="window.quoteInjected=true">')
+        self.seed_text_quote(text)
+        self.open_app()
+        self.row_with('下划线一级').click()
+        self.page.locator('#app').wait_for(state='visible')
+        self.assertEqual(self.page.locator('#qt h1').inner_text(), '下划线一级')
+        self.assertEqual(self.page.locator('#qt h2').inner_text(), '下划线二级')
+        self.assertEqual(self.page.locator('#qt h3,#qt h4,#qt h5,#qt h6').count(), 0)
+        self.assertIn('# 这是正文', self.page.locator('#qt').inner_text())
+        self.assertIn('# 代码里的井号', self.page.locator('#qt pre').inner_text())
+        self.assertFalse(self.page.evaluate('Boolean(window.quoteInjected)'))
+        self.assertEqual(self.page.locator('#qt script,#qt iframe,#qt img').count(), 0)
+        self.assertFalse(any('example.invalid' in url for url in self.blocked), '展示不应尝试加载外网图片')
+
+    def test_long_body_stays_readable_after_window_resize(self):
+        text = '\n\n'.join('第%d段正文需要可以滚动阅读。' % i for i in range(1, 81))
+        self.seed_text_quote(text)
+        self.open_app()
+        self.row_with('第1段正文').click()
+        self.page.locator('#app').wait_for(state='visible')
+        self.page.set_viewport_size({'width': 390, 'height': 844})
+        self.page.wait_for_function('() => document.querySelector("#quote").scrollHeight > document.querySelector("#quote").clientHeight')
+        self.assertEqual(self.page.locator('#quote').evaluate('(e) => getComputedStyle(e).overflowY'), 'auto')
+        self.page.locator('#qt p').last.scroll_into_view_if_needed()
+        self.assertTrue(self.page.locator('#qt p').last.is_visible())
+        self.assertIn('第80段正文', self.page.locator('#qt p').last.inner_text())
+        self.assertLessEqual(self.page.locator('#qt p').first.evaluate('(e) => parseFloat(getComputedStyle(e).fontSize)'), 28)
+
+    def test_choose_heading_level_in_toolbar_and_change_it(self):
+        self.open_app()
+        self.page.locator('#btnNew').click()
+        editor = self.page.locator('#cedit .vditor-ir .vditor-reset')
+        editor.wait_for(state='visible')
+        editor.click()
+        self.page.keyboard.type('通过工具栏设置标题')
+        self.page.locator('#cedit button[data-type="headings"]').click()
+        self.page.locator('#cedit button[data-tag="h2"]').click()
+        editor.locator('h2').wait_for(state='visible')
+        self.page.locator('#cSave').click()
+        self.page.locator('#compose').wait_for(state='hidden')
+        self.row_with('通过工具栏设置标题').click()
+        self.page.get_by_role('heading', name='通过工具栏设置标题', level=2).wait_for(state='visible')
+        self.page.locator('#btnEdit').click()
+        editor.locator('h2').wait_for(state='visible')
+        editor.locator('h2').click()
+        self.page.wait_for_function('() => document.querySelector("#cedit button[data-type=headings]").classList.contains("vditor-menu--current")')
+        self.page.locator('#cedit button[data-type="headings"]').click()
+        self.page.wait_for_function('() => !document.querySelector("#cedit .vditor-ir h2")')
+        self.page.wait_for_function('() => !document.querySelector("#cedit button[data-type=headings]").classList.contains("vditor-menu--current")')
+        self.page.locator('#cedit button[data-type="headings"]').click()
+        self.page.locator('#cedit button[data-tag="h3"]').click()
+        editor.locator('h3').wait_for(state='visible')
+        self.page.locator('#cSave').click()
+        self.page.locator('#compose').wait_for(state='hidden')
+        self.page.get_by_role('heading', name='通过工具栏设置标题', level=3).wait_for(state='visible')
+        saved = next(q for q in self.list_all() if '通过工具栏设置标题' in q['text'])
+        self.assertTrue(saved['text'].strip().startswith('### '))
+
+    def test_wallpaper_keeps_complete_body_and_heading_hierarchy(self):
+        self.seed_text_quote('Wallpaper body first.\n\n## Wallpaper heading\n\nWallpaper body last.')
+        self.open_app()
+        self.row_with('Wallpaper body first.').click()
+        self.page.locator('#app').wait_for(state='visible')
+        drawn = self.capture_wallpaper()
+        visible = ' '.join(item['text'] for item in drawn)
+        for text in ('Wallpaper body first.', 'Wallpaper heading', 'Wallpaper body last.'):
+            self.assertIn(text, visible)
+        body_font = next(item['font'] for item in drawn if item['text'] == 'Wallpaper body first.')
+        heading_font = next(item['font'] for item in drawn if item['text'] == 'Wallpaper heading')
+        size = lambda font: float(re.search(r'([0-9.]+)px', font).group(1))
+        self.assertGreater(size(heading_font), size(body_font))
+
+    def capture_wallpaper(self):
+        self.page.evaluate('''() => {
+            window.canvasText = [];
+            const draw = CanvasRenderingContext2D.prototype.fillText;
+            CanvasRenderingContext2D.prototype.fillText = function(text, ...args) {
+                window.canvasText.push({text, font: this.font, x: args[0], y: args[1],
+                                       width: this.measureText(text).width,
+                                       canvasWidth: this.canvas.width, canvasHeight: this.canvas.height});
+                return draw.call(this, text, ...args);
+            };
+        }''')
+        requests = []
+        def wallpaper_response(route):
+            requests.append(route.request.post_data_json)
+            route.fulfill(status=200, content_type='application/json',
+                          body='{"ok":true,"applied":false,"path":"/tmp/disposable-wallpaper.png"}')
+        self.page.route('**/wallpaper', wallpaper_response)
+        self.page.locator('#btnWall').click()
+        self.page.wait_for_function('() => document.querySelector("#btnWall").textContent === "壁纸"')
+        self.assertEqual(len(requests), 1)
+        self.assertTrue(requests[0]['png'].startswith('data:image/png;base64,'))
+        return self.page.evaluate('window.canvasText')
+
+    def test_task_status_and_wallpaper_preserve_all_visible_content(self):
+        text = ('# 导出示例\n\n- [ ] TODO\n- [x] DONE\n\n'
+                '<div>raw block <strong>strong</strong></div>\n\n'
+                '1. parent\n   - child\n     - grandchild\n\n'
+                '```\nfirst_line\nsecond_line\nthird_line\n```\n\n' + 'A' * 200)
+        self.seed_text_quote(text)
+        self.open_app()
+        self.row_with('导出示例').click()
+        self.page.locator('#app').wait_for(state='visible')
+        boxes = self.page.locator('#qt input[type="checkbox"]')
+        self.assertEqual(boxes.count(), 2)
+        self.assertFalse(boxes.nth(0).is_checked())
+        self.assertTrue(boxes.nth(1).is_checked())
+        self.assertTrue(boxes.nth(0).is_disabled() and boxes.nth(1).is_disabled())
+        drawn = self.capture_wallpaper()
+        visible = ' '.join(item['text'] for item in drawn)
+        self.assertIn('raw block strong', visible)
+        for line in ('first_line', 'second_line', 'third_line'):
+            self.assertTrue(any(item['text'].strip() == line for item in drawn), line)
+        for item in drawn:
+            self.assertNotIn('\n', item['text'])
+            self.assertLessEqual(item['x'] + item['width'], item['canvasWidth'] + 1, item)
+        self.assertEqual(sum(item['text'].count('A') for item in drawn), 200)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
