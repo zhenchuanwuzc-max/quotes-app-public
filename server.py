@@ -12,6 +12,7 @@ quotes-app 本地 HTTP 服务（v0.1.0：JSON-as-truth + git 同步，弃 SQLite
 - POST   /sync-now      → 手动触发 git 同步，回 sync.sh 写的状态
 - POST   /wallpaper     → {name, png(dataURL), at:{x,y}} 存 PNG 到 ~/Pictures/quotes-app/ 并设为窗口所在显示器的桌面壁纸
 - GET    /health        → {ok, total}
+- GET/PUT /settings/shortcuts → 本机快捷键设置（不写金句数据、不参与同步）
 
 数据：~/quotes-data/quotes.json（单 JSON 对象，本地真库，git 仓根；不进 iCloud）
   格式：{"updated": ISO, "quotes": [{id,text,source,use_case,created_at,updated_at,pinned,pinned_at}]}
@@ -41,6 +42,8 @@ import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
+
+from shortcut_settings import read_shortcuts, write_shortcuts
 
 try:
     from zoneinfo import ZoneInfo
@@ -801,6 +804,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/settings/shortcuts":
+            try:
+                self._send(200, json.dumps(read_shortcuts(), ensure_ascii=False))
+            except Exception as e:
+                self._send(500, json.dumps({"ok": False, "error": "读取快捷键失败：" + str(e)}, ensure_ascii=False))
+            return
         if parsed.path.startswith("/attachments/"):
             try:
                 data, mime = _read_attachment(parsed.path[len("/attachments/"):])
@@ -968,6 +977,22 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self._send(404, json.dumps({"error": "not found"}))
+
+    def do_PUT(self):
+        if urlparse(self.path).path != "/settings/shortcuts":
+            self._send(404, json.dumps({"error": "not found"}))
+            return
+        payload = self._json_body()
+        if payload is None:
+            return
+        try:
+            if set(payload) != {"bindings"}:
+                raise ValueError("请求必须只包含 bindings")
+            self._send(200, json.dumps(write_shortcuts(payload["bindings"]), ensure_ascii=False))
+        except ValueError as e:
+            self._send(400, json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
+        except Exception as e:
+            self._send(500, json.dumps({"ok": False, "error": "保存快捷键失败：" + str(e)}, ensure_ascii=False))
 
     def do_PATCH(self):
         # PATCH /quotes/<id>/pin  body {pinned: bool}

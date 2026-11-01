@@ -388,11 +388,25 @@ mark{background:none;color:var(--ink);font-weight:700}
 
 /* ================= help ================= */
 #help{position:fixed;inset:0;z-index:12;background:rgba(18,18,18,.48);display:flex;align-items:center;justify-content:center;padding:var(--gut)}
-.hcard{background:var(--paper);color:var(--ink);border:1px solid rgba(18,18,18,.85);padding:clamp(18px,3vh,28px) clamp(20px,3vw,34px);width:100%;max-width:380px}
-.httl{font-size:10px;letter-spacing:.08em;color:rgba(18,18,18,.5);margin-bottom:12px}
-.hrow{display:flex;align-items:baseline;justify-content:space-between;gap:20px;padding:7px 0;border-bottom:1px solid rgba(18,18,18,.1);font-size:13px}
-.hrow:last-child{border-bottom:0}
-.hrow b{font-weight:500;font-size:11px;letter-spacing:.08em;color:rgba(18,18,18,.55)}
+.hcard{background:var(--paper);color:var(--ink);border:1px solid rgba(18,18,18,.85);padding:clamp(18px,3vh,28px) clamp(18px,3vw,32px);width:100%;max-width:660px;max-height:90vh;overflow:auto;overscroll-behavior:contain;--fg:var(--ink);--bg:var(--paper);--hair:rgba(18,18,18,.22)}
+.hhead{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.httl{font-size:18px;font-weight:500;margin:0}
+.hintro,.hfixed{font-size:11px;line-height:1.7;color:rgba(18,18,18,.6)}
+.hintro{margin:12px 0 18px}
+.hcolumns,.hrow{display:grid;grid-template-columns:minmax(70px,1fr) minmax(130px,1.5fr) minmax(70px,1fr);gap:12px;align-items:center}
+.hcolumns{font-size:10px;color:rgba(18,18,18,.5);padding-bottom:8px;border-bottom:1px solid rgba(18,18,18,.25)}
+.hrow{padding:9px 0;border-bottom:1px solid rgba(18,18,18,.12);font-size:12px}
+.hscope{font-size:10px;line-height:1.6;color:rgba(18,18,18,.55)}
+.hrow select{width:100%;min-height:32px;border:1px solid rgba(18,18,18,.3);border-radius:0;background:var(--paper);color:var(--ink);font:inherit;padding:4px 6px}
+.hrow select:disabled{opacity:.5}
+.hfixed{border-bottom:1px solid rgba(18,18,18,.2);padding:14px 0;margin-bottom:14px}
+.hfixed p{margin:0 0 5px}.hfixed p:last-child{margin-bottom:0}
+#shortcutMessage{font-size:11px;line-height:1.7;min-height:19px;margin:10px 0}
+#shortcutMessage[data-kind="error"]{color:#9c201b}
+.hactions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+#shortcutReset{margin-right:auto}
+#help .tag{font-size:11px}
+@media(max-width:480px){#help{padding:12px}.hcolumns,.hrow{grid-template-columns:minmax(60px,1fr) minmax(128px,1.65fr) minmax(46px,.8fr);gap:8px}.hcard{padding:18px 14px}.hactions{gap:8px}.hactions .tag{padding:0 9px}}
 
 /* ================= 状态行（全站唯一消息位） ================= */
 #status{
@@ -469,7 +483,7 @@ mark{background:none;color:var(--ink);font-weight:700}
     <div class="spacer"></div>
     <button class="tag" id="btnSync">同步</button>
     <button class="tag" id="btnNew" disabled>新增</button>
-    <button class="hbtn" id="btnHelpA" type="button" aria-label="快捷键">?</button>
+    <button class="tag" id="btnHelpA" type="button" aria-label="快捷键">快捷键</button>
   </header>
   <div id="iscroll">
     <div class="isheet">
@@ -486,7 +500,7 @@ mark{background:none;color:var(--ink);font-weight:700}
     <button class="tag chip-filter" id="chipFilter" hidden></button>
     <div class="spacer"></div>
     <button class="tag" id="btnBack">目录</button>
-    <button class="hbtn" id="btnHelpB" type="button" aria-label="快捷键">?</button>
+    <button class="tag" id="btnHelpB" type="button" aria-label="快捷键">快捷键</button>
   </header>
 
   <main id="stage">
@@ -542,18 +556,18 @@ mark{background:none;color:var(--ink);font-weight:700}
 
 <!-- ============ 快捷键 ============ -->
 <section id="help" hidden aria-hidden="true">
-  <div class="hcard" role="dialog" aria-label="快捷键">
-    <div class="httl">快捷键</div>
-    <div class="hrow"><span>搜索</span><b>/</b></div>
-    <div class="hrow"><span>新增</span><b>N</b></div>
-    <div class="hrow"><span>上一条 / 下一条</span><b>K / J</b></div>
-    <div class="hrow"><span>打开</span><b>Enter</b></div>
-    <div class="hrow"><span>置顶</span><b>P</b></div>
-    <div class="hrow"><span>复制</span><b>C</b></div>
-    <div class="hrow"><span>编辑</span><b>E</b></div>
-    <div class="hrow"><span>设为壁纸（海报里）</span><b>W</b></div>
-    <div class="hrow"><span>返回 / 关闭</span><b>Esc</b></div>
-    <div class="hrow"><span>本面板</span><b>?</b></div>
+  <div class="hcard" role="dialog" aria-modal="true" aria-labelledby="shortcutTitle" tabindex="-1">
+    <div class="hhead"><h2 class="httl" id="shortcutTitle">快捷键</h2><button class="tag" id="shortcutClose" type="button" aria-label="关闭快捷键">关闭</button></div>
+    <p class="hintro">选择常用按键，保存后生效。设置仅保存在这台电脑，不随金句同步。</p>
+    <div id="shortcutTable" hidden><div class="hcolumns" aria-hidden="true"><span>操作</span><span>按键</span><span>生效界面</span></div><div id="shortcutRows"></div></div>
+    <div class="hfixed" id="shortcutFixed" hidden></div>
+    <div id="shortcutMessage" role="status" aria-live="polite"></div>
+    <div class="hactions">
+      <button class="tag" id="shortcutReset" type="button" disabled>恢复默认</button>
+      <button class="tag" id="shortcutRetry" type="button" hidden>重试加载</button>
+      <button class="tag" id="shortcutCancel" type="button">取消</button>
+      <button class="tag" id="shortcutSave" type="button" disabled>保存设置</button>
+    </div>
   </div>
 </section>
 
@@ -1572,8 +1586,12 @@ listEl.addEventListener('click', function(e){
   }
   showPoster(i,true);
 });
+listEl.addEventListener('focusin',function(e){
+  var row=e.target.closest('.row'); if(row) setCur(parseInt(row.getAttribute('data-i'),10),false);
+});
 listEl.addEventListener('keydown', function(e){
-  var row=e.target.closest('.row'); if(!row) return;
+  var row=e.target.closest('.row'); if(!row || e.defaultPrevented || e.isComposing || e.keyCode===229) return;
+  if(e.target.closest('button,a,input,textarea,select,[contenteditable]')) return;
   if(e.key==='Enter'||e.key===' '){
     e.preventDefault();
     var i=parseInt(row.getAttribute('data-i'),10);
@@ -1588,6 +1606,7 @@ qInput.addEventListener('input', function(){
   else renderPoster(true);
 });
 qInput.addEventListener('keydown', function(e){
+  if(e.defaultPrevented || e.isComposing || e.keyCode===229) return;
   if(e.key==='Escape'){
     e.stopPropagation();
     if(qInput.value){ qInput.value=''; qInput.dispatchEvent(new Event('input')); }
@@ -1620,12 +1639,176 @@ btnPrev.addEventListener('click', function(){ step(-1); });
 btnNext.addEventListener('click', function(){ step(1); });
 $('btnBack').addEventListener('click', function(){ showIndex(); });
 
-/* ---- help ---- */
-function openHelp(){ helpEl.hidden=false; helpEl.setAttribute('aria-hidden','false'); }
-function closeHelp(){ helpEl.hidden=true; helpEl.setAttribute('aria-hidden','true'); }
-$('btnHelpA').addEventListener('click', openHelp);
-$('btnHelpB').addEventListener('click', openHelp);
-helpEl.addEventListener('click', closeHelp);
+/* ---- 快捷键设置：服务端注册表负责按键与适用范围，草稿不参与派发 ---- */
+var shortcutSettings=null, shortcutDraft=null, shortcutLoading=false, shortcutSaving=false;
+var shortcutRequest=0, shortcutError='', shortcutReturnFocus=null;
+function cloneBindings(bindings){ return Object.assign({},bindings); }
+function shortcutKeyLabel(binding){
+  if(binding==='mod+s') return '⌘ / Ctrl + S';
+  if(binding==='mod+shift+s') return '⌘ / Ctrl + Shift + S';
+  if(binding==='mod+enter') return '⌘ / Ctrl + Enter';
+  return {ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→',Space:'空格'}[binding] || binding.toUpperCase();
+}
+function shortcutScopeLabel(scope){
+  return scope.map(function(s){ return {index:'目录',poster:'海报',compose:'编辑器'}[s]||s; }).join(' · ');
+}
+function shortcutConflict(){
+  if(!shortcutSettings || !shortcutDraft) return '';
+  var used={}, conflict='';
+  shortcutSettings.actions.some(function(action){
+    var value=shortcutDraft[action.id];
+    if(action.options.indexOf(value)<0){ conflict=action.label+'的快捷键无效'; return true; }
+    if(used[value]){ conflict='快捷键冲突：'+used[value]+'与'+action.label+'使用了 '+shortcutKeyLabel(value); return true; }
+    used[value]=action.label; return false;
+  });
+  return conflict;
+}
+function updateShortcutControls(){
+  var conflict=shortcutConflict(), ready=!!(shortcutSettings && shortcutDraft);
+  $('shortcutSave').disabled=!ready || shortcutSaving || !!conflict;
+  $('shortcutSave').textContent=shortcutSaving?'正在保存…':'保存设置';
+  $('shortcutReset').disabled=!ready || shortcutSaving;
+  $('shortcutCancel').disabled=shortcutSaving; $('shortcutClose').disabled=shortcutSaving;
+  $('shortcutRetry').hidden=!!shortcutSettings || !shortcutError || shortcutLoading;
+  $('shortcutRows').querySelectorAll('select').forEach(function(select){ select.disabled=shortcutSaving; });
+  var message=shortcutSaving?'正在保存，完成后新按键生效。':shortcutLoading?'正在载入快捷键…':conflict||shortcutError||(shortcutSettings && shortcutSettings.warning)||'';
+  $('shortcutMessage').textContent=message;
+  $('shortcutMessage').setAttribute('data-kind',conflict||shortcutError?'error':'status');
+}
+function renderShortcutDraft(){
+  var rows=$('shortcutRows'), fixed=$('shortcutFixed'); rows.innerHTML=''; fixed.innerHTML='';
+  $('shortcutTable').hidden=!shortcutSettings; fixed.hidden=!shortcutSettings;
+  if(shortcutSettings && shortcutDraft){
+    var aliases=[];
+    shortcutSettings.actions.forEach(function(action){
+      var row=document.createElement('div'); row.className='hrow';
+      var label=document.createElement('label'); label.htmlFor='shortcut-'+action.id; label.textContent=action.label;
+      var select=document.createElement('select'); select.id='shortcut-'+action.id;
+      select.setAttribute('aria-label',action.label+'快捷键');
+      action.options.forEach(function(binding){
+        var option=document.createElement('option'); option.value=binding; option.textContent=shortcutKeyLabel(binding); select.appendChild(option);
+      });
+      select.value=shortcutDraft[action.id];
+      select.addEventListener('change',function(){ shortcutDraft[action.id]=select.value; shortcutError=''; updateShortcutControls(); });
+      var scope=document.createElement('span'); scope.className='hscope'; scope.textContent=shortcutScopeLabel(action.scope);
+      row.appendChild(label); row.appendChild(select); row.appendChild(scope); rows.appendChild(row);
+      action.aliases.forEach(function(alias){ aliases.push(shortcutKeyLabel(alias.binding)+' '+action.label+'（'+shortcutScopeLabel(alias.scope)+'）'); });
+    });
+    var compat=document.createElement('p'); compat.textContent='固定兼容：'+aliases.join('；')+'。'; fixed.appendChild(compat);
+    var navigation=document.createElement('p'); navigation.textContent='固定导航：Home / End 到首条 / 末条；Enter 在目录打开；Esc 关闭面板或返回。输入文字和使用中文输入法时，不触发单键操作。'; fixed.appendChild(navigation);
+  }
+  updateShortcutControls();
+}
+function acceptShortcutSettings(response){
+  if(!response.ok || !response.bindings || !response.defaults || !Array.isArray(response.actions)) throw new Error(response.error||'快捷键设置响应无效');
+  shortcutSettings=response;
+}
+function loadShortcutSettings(){
+  var request=++shortcutRequest; shortcutLoading=true; shortcutError=''; updateShortcutControls();
+  return api('/settings/shortcuts').then(function(response){
+    if(request!==shortcutRequest) return;
+    acceptShortcutSettings(response); shortcutLoading=false;
+    if(!helpEl.hidden){ shortcutDraft=cloneBindings(shortcutSettings.bindings); renderShortcutDraft(); }
+  }).catch(function(error){
+    if(request!==shortcutRequest) return;
+    shortcutLoading=false; shortcutError='载入失败：'+String(error.message||error); updateShortcutControls();
+  });
+}
+function helpFocusable(){
+  return Array.prototype.filter.call(helpEl.querySelectorAll('button:not([disabled]),select:not([disabled]),[tabindex="0"]'),function(node){ return !node.hidden && node.getClientRects().length; });
+}
+function openHelp(){
+  if(!helpEl.hidden) return;
+  shortcutReturnFocus=document.activeElement;
+  shortcutDraft=shortcutSettings?cloneBindings(shortcutSettings.bindings):null; shortcutError='';
+  helpEl.hidden=false; helpEl.setAttribute('aria-hidden','false'); renderShortcutDraft();
+  $('shortcutClose').focus();
+  if(!shortcutSettings && !shortcutLoading) loadShortcutSettings();
+}
+function closeHelp(){
+  if(shortcutSaving) return;
+  helpEl.hidden=true; helpEl.setAttribute('aria-hidden','true'); shortcutDraft=null; shortcutError='';
+  var previous=shortcutReturnFocus; shortcutReturnFocus=null;
+  if(previous && previous!==document.body && previous.isConnected && previous.getClientRects().length) previous.focus({preventScroll:true});
+  else (state.view==='poster'?$('btnHelpB'):$('btnHelpA')).focus({preventScroll:true});
+}
+function saveShortcutSettings(){
+  if(!shortcutDraft || shortcutSaving || shortcutConflict()) return;
+  var request=++shortcutRequest, bindings=cloneBindings(shortcutDraft);
+  shortcutSaving=true; shortcutError=''; updateShortcutControls();
+  api('/settings/shortcuts',{method:'PUT',body:{bindings:bindings}}).then(function(response){
+    if(request!==shortcutRequest) return;
+    acceptShortcutSettings(response); shortcutSaving=false; updateShortcutControls(); closeHelp();
+    status(response.warning||'快捷键已保存');
+  }).catch(function(error){
+    if(request!==shortcutRequest) return;
+    shortcutSaving=false; shortcutError='保存失败：'+String(error.message||error); updateShortcutControls();
+  });
+}
+$('btnHelpA').addEventListener('click',openHelp); $('btnHelpB').addEventListener('click',openHelp);
+$('shortcutClose').addEventListener('click',closeHelp); $('shortcutCancel').addEventListener('click',closeHelp);
+$('shortcutRetry').addEventListener('click',loadShortcutSettings); $('shortcutSave').addEventListener('click',saveShortcutSettings);
+$('shortcutReset').addEventListener('click',function(){
+  if(!shortcutSettings || shortcutSaving) return;
+  shortcutDraft=cloneBindings(shortcutSettings.defaults); shortcutError=''; renderShortcutDraft(); $('shortcutReset').focus();
+});
+helpEl.addEventListener('click',function(e){ if(e.target===helpEl) closeHelp(); });
+document.addEventListener('keydown',function(e){
+  if(helpEl.hidden) return;
+  e.stopImmediatePropagation();
+  if(e.key==='Escape'){ e.preventDefault(); closeHelp(); return; }
+  if(e.key==='Tab'){
+    var controls=helpFocusable(), first=controls[0], last=controls[controls.length-1];
+    if(!first){ e.preventDefault(); helpEl.querySelector('.hcard').focus(); return; }
+    if(e.shiftKey && (document.activeElement===first || !helpEl.contains(document.activeElement))){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && (document.activeElement===last || !helpEl.contains(document.activeElement))){ e.preventDefault(); first.focus(); }
+  }
+},true);
+document.addEventListener('focusin',function(e){
+  if(!helpEl.hidden && !helpEl.contains(e.target)){
+    var controls=helpFocusable(); (controls[0]||helpEl.querySelector('.hcard')).focus();
+  }
+});
+function shortcutMatches(e,binding){
+  if(e.altKey) return false;
+  if(binding.indexOf('mod+')===0){
+    if(!(e.metaKey||e.ctrlKey) || e.shiftKey!==(binding.indexOf('shift+')>=0)) return false;
+    return e.key.toLowerCase()===binding.split('+').pop();
+  }
+  if(e.metaKey||e.ctrlKey) return false;
+  if(binding==='Space') return e.key===' ' && !e.shiftKey;
+  if(binding.length>1) return e.key===binding && !e.shiftKey;
+  var key=e.key==='/' && e.shiftKey?'?':e.key.toLowerCase();
+  return key===binding;
+}
+function matchingShortcut(e,scope){
+  if(!shortcutSettings) return null;
+  for(var i=0;i<shortcutSettings.actions.length;i++){
+    var action=shortcutSettings.actions[i];
+    if(action.scope.indexOf(scope)>=0 && shortcutMatches(e,shortcutSettings.bindings[action.id])) return action.id;
+    for(var j=0;j<action.aliases.length;j++){
+      var alias=action.aliases[j];
+      if(alias.scope.indexOf(scope)>=0 && shortcutMatches(e,alias.binding)) return action.id;
+    }
+  }
+  return null;
+}
+var shortcutHandlers={
+  add:function(){openCompose();},
+  edit:function(){var q=at(state.view==='index'?state.cur:state.idx); if(q) openCompose(q.id);},
+  search:function(){if(state.view==='poster') showIndex(); qInput.focus(); qInput.select();},
+  previous:function(){if(state.view==='index') setCur(state.cur-1,true); else step(-1);},
+  next:function(){if(state.view==='index') setCur(state.cur+1,true); else step(1);},
+  pin:function(){togglePin(state.view==='index'?state.cur:state.idx);},
+  copy:function(){if(state.view==='index') copyRow(state.cur); else copyPoster();},
+  wallpaper:setWallpaper, index:showIndex, help:openHelp, save:saveCompose
+};
+function dispatchShortcut(e,scope){
+  var action=matchingShortcut(e,scope);
+  if(!action || (e.repeat && action!=='previous' && action!=='next')) return false;
+  if(!shortcutHandlers[action]) return false;
+  e.preventDefault(); shortcutHandlers[action](); return true;
+}
 
 /* ================= 载入 / 重载 ================= */
 function indexOfId(id){ var k; for(k=0;k<state.L.length;k++) if(state.L[k].id===id) return k; return -1; }
@@ -1977,15 +2160,15 @@ function saveCompose(){
 }
 $('cCancel').addEventListener('click', closeCompose);
 $('cSave').addEventListener('click', saveCompose);
-/* 捕获阶段拿 Esc / Cmd+Enter，免得被 Vditor 自己的键盘处理吃掉 */
+/* 保存组合键在捕获阶段执行，避免被编辑器自身的键盘处理吃掉。 */
 document.addEventListener('keydown', function(e){
-  if(composeEl.hidden) return;
+  if(composeEl.hidden || !helpEl.hidden || e.defaultPrevented || e.isComposing || e.keyCode===229) return;
   if(e.key==='Escape'){
     e.preventDefault(); e.stopPropagation();
     if(headingFeedback && headingFeedback.dismissMenu()){ e.stopImmediatePropagation(); return; }
     closeCompose(); return;
   }
-  if((e.metaKey||e.ctrlKey) && e.key==='Enter'){ e.preventDefault(); e.stopPropagation(); saveCompose(); }
+  if(dispatchShortcut(e,'compose')) e.stopImmediatePropagation();
 }, true);
 
 /* ---- 删除 ---- */
@@ -2097,11 +2280,11 @@ function typingSomewhere(){
   var a=document.activeElement;
   if(!a) return false;
   if(a===qInput||a===cSrc||a===cUse) return true;
-  return !!(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.isContentEditable);
+  return !!(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'||a.isContentEditable);
 }
 function pollHealth(){
   if(pollBusy || state.load!=='ready') return;
-  if(!composeEl.hidden) return;              /* 编辑面板开着不打断 */
+  if(!composeEl.hidden || !helpEl.hidden) return; /* 编辑或设置面板开着不打断 */
   if(typingSomewhere()) return;
   pollBusy=true;
   api('/health').then(function(d){
@@ -2115,63 +2298,27 @@ function pollHealth(){
 /* ---- keyboard ---- */
 function typing(e){
   var t=e.target;
-  return !!(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable));
+  return !!(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable || (t.closest && t.closest('[contenteditable]:not([contenteditable="false"])'))));
 }
 document.addEventListener('keydown', function(e){
-  if(!imageViewer.hidden) return;
-  if(e.target.closest && e.target.closest('#posterImages button') && (e.key==='Enter'||e.key===' ')) return;
+  if(e.defaultPrevented || e.isComposing || e.keyCode===229 || !imageViewer.hidden || !helpEl.hidden) return;
+  if((e.key==='Enter'||e.key===' ') && e.target.closest && e.target.closest('button,a,summary,[role="button"],[role="link"]')) return;
   if(e.key==='Escape'){
-    if(!helpEl.hidden){ closeHelp(); return; }
     if(!composeEl.hidden){ closeCompose(); return; }
     if(state.view==='poster'){ showIndex(); return; }
     if(state.q){ qInput.value=''; state.q=''; state.id=null; state.idx=0; state.cur=0; rebuild(); renderList(); return; }
     if(state.filter!==null){ setFilter(null); return; }
     return;
   }
-  if(typing(e)) return;
+  if(typing(e) || !composeEl.hidden) return;
+  if(dispatchShortcut(e,state.view)) return;
   if(e.metaKey||e.ctrlKey||e.altKey) return;
-  if(!composeEl.hidden) return;
-
-  var k=e.key;
-  if(k==='?'||(k==='/'&&e.shiftKey)){
+  if(e.key==='Home' || e.key==='End'){
     e.preventDefault();
-    if(helpEl.hidden) openHelp(); else closeHelp();
-    return;
-  }
-  if(!helpEl.hidden) return;
-  if(k==='/'){
-    e.preventDefault();
-    if(state.view==='poster') showIndex();
-    qInput.focus(); qInput.select();
-    return;
-  }
-  if(k==='n'||k==='N'){ e.preventDefault(); openCompose(); return; }
-
-  if(state.view==='index'){
-    switch(k){
-      case 'ArrowDown': case 'j': case 'J': e.preventDefault(); setCur(state.cur+1,true); break;
-      case 'ArrowUp': case 'k': case 'K': e.preventDefault(); setCur(state.cur-1,true); break;
-      case 'Home': e.preventDefault(); setCur(0,true); break;
-      case 'End': e.preventDefault(); setCur(state.L.length-1,true); break;
-      case 'Enter': e.preventDefault(); if(state.L.length) showPoster(state.cur,true); break;
-      case 'p': case 'P': e.preventDefault(); togglePin(state.cur); break;
-      case 'c': case 'C': e.preventDefault(); copyRow(state.cur); break;
-      case 'e': case 'E': e.preventDefault(); var qi=at(state.cur); if(qi) openCompose(qi.id); break;
-    }
-    return;
-  }
-  switch(k){
-    case 'ArrowRight': case 'ArrowDown': case 'j': case 'J': case ' ':
-      e.preventDefault(); step(1); break;
-    case 'ArrowLeft': case 'ArrowUp': case 'k': case 'K':
-      e.preventDefault(); step(-1); break;
-    case 'Home': e.preventDefault(); showPoster(0,true); break;
-    case 'End': e.preventDefault(); showPoster(state.L.length-1,true); break;
-    case 'p': case 'P': e.preventDefault(); togglePin(state.idx); break;
-    case 'c': case 'C': e.preventDefault(); copyPoster(); break;
-    case 'e': case 'E': e.preventDefault(); var qp=at(state.idx); if(qp) openCompose(qp.id); break;
-    case 'i': case 'I': e.preventDefault(); showIndex(); break;
-    case 'w': case 'W': e.preventDefault(); setWallpaper(); break;
+    var index=e.key==='Home'?0:state.L.length-1;
+    if(state.view==='index') setCur(index,true); else showPoster(index,true);
+  }else if(e.key==='Enter' && state.view==='index' && !e.repeat){
+    e.preventDefault(); if(state.L.length) showPoster(state.cur,true);
   }
 });
 
@@ -2236,6 +2383,7 @@ if(document.fonts && document.fonts.ready){
 rebuild();
 indexEl.hidden=false; app.hidden=true;
 renderRail(); renderList();                    /* 先画「载入中」，不动 hash */
+loadShortcutSettings();
 reload().then(function(){
   applyHash();
 }).catch(function(e){

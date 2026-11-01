@@ -12,6 +12,7 @@
 | 记住出处与用途 | 新增面板 | [compose-defaults.md](compose-defaults.md) |
 | 标题与正文层级 | 编辑器标题工具、金句展示 | [headings.md](headings.md) |
 | 图片与视频来源 | 新增或编辑、缩略图、海报 | [images.md](images.md) |
+| 快捷键与设置 | 目录与展示的快捷键按钮 | [shortcuts.md](shortcuts.md) |
 | 多设备同步 | 同步按钮及后台同步 | [sync.md](sync.md) |
 
 图片、同步、壁纸、原生窗口和真实设备的验证范围各自独立。隔离环境不代表系统壁纸或更新操作也被隔离。
