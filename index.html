@@ -468,7 +468,7 @@ mark{background:none;color:var(--ink);font-weight:700}
     </div>
     <div class="spacer"></div>
     <button class="tag" id="btnSync">同步</button>
-    <button class="tag" id="btnNew">新增</button>
+    <button class="tag" id="btnNew" disabled>新增</button>
     <button class="hbtn" id="btnHelpA" type="button" aria-label="快捷键">?</button>
   </header>
   <div id="iscroll">
@@ -587,6 +587,14 @@ var RM = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion:redu
 /* ================= data ================= */
 /* 原始 Markdown 用于编辑与正文展示，纯文本用于目录、搜索与复制。 */
 var DB = [];
+var composeDefaults={source:'',use_case:''}, composeDefaultsVersion=0;
+function metadataDefaults(value){
+  value=value && typeof value==='object'?value:{};
+  return {source:typeof value.source==='string'?value.source:'',use_case:typeof value.use_case==='string'?value.use_case:''};
+}
+function rememberComposeDefaults(source,use_case){
+  composeDefaults={source:source,use_case:use_case}; composeDefaultsVersion++;
+}
 var UC_FIXED = ['日常工作','学习','读书','汇报','公司做事情'];
 
 /* Markdown 源码 → 干净纯文本：移植旧界面 mdToPlain，补反斜杠转义还原 */
@@ -1623,11 +1631,14 @@ helpEl.addEventListener('click', closeHelp);
 function indexOfId(id){ var k; for(k=0;k<state.L.length;k++) if(state.L[k].id===id) return k; return -1; }
 function reload(opt){
   opt=opt||{};
+  var defaultsVersion=composeDefaultsVersion;
   return api('/quotes?limit=9999').then(function(r){
     if(!r.ok || !r.quotes) throw new Error(r.error||('HTTP '+r.__status));
+    if(defaultsVersion===composeDefaultsVersion) composeDefaults=metadataDefaults(r.compose_defaults);
     DB=r.quotes.map(norm);
     renumber();
     state.load='ready';
+    $('btnNew').disabled=false;
     if(opt.id) state.id=opt.id;
     rebuild();
     return DB.length;
@@ -1875,6 +1886,7 @@ function fillUseList(){
   out.forEach(function(u){ var o=document.createElement('option'); o.value=u; dl.appendChild(o); });
 }
 function openCompose(id){
+  if(!id && state.load!=='ready'){ status('正在载入金句，请稍候'); return; }
   var q = id? byId(id) : null;
   if(id && !q){ status('这条已经不在库里了'); return; }
   editingId = q? q.id : null;
@@ -1884,8 +1896,8 @@ function openCompose(id){
   composeEl.hidden=false; composeEl.setAttribute('aria-hidden','false');
   cTitle.textContent = q? '编辑' : '新增';
   $('cSave').textContent = q? '保存' : '存入';
-  cSrc.value = q? q.source : '';
-  cUse.value = q? q.use_case : '';
+  cSrc.value = q? q.source : composeDefaults.source;
+  cUse.value = q? q.use_case : composeDefaults.use_case;
   cUrl.value = q? q.source_url : '';
   clearComposeAttachments();
   composeAttachments=(q?q.attachments:[]).map(function(a){ return {attachment:a,state:'ready'}; });
@@ -1931,6 +1943,7 @@ function saveCompose(){
           });
         }
         if(!r.ok) throw new Error(r.error||('HTTP '+r.__status));
+        rememberComposeDefaults(source,use_case);
         resetCompose();
         return reload({id:id}).then(function(){
           if(back==='poster' && indexOfId(id)>=0) showPoster(indexOfId(id),false);
@@ -1945,6 +1958,7 @@ function saveCompose(){
   api('/quotes/add',{method:'POST',body:{text:text,source:source,use_case:use_case,source_url:source_url,attachments:attachments}})
     .then(function(r){
       if(!r.ok || !r.quote) throw new Error(r.error||('HTTP '+r.__status));
+      rememberComposeDefaults(source,use_case);
       var nid=r.quote.id, back=state.back;
       resetCompose();
       state.filter=null; state.q=''; qInput.value='';      /* 清空搜索与筛选 */

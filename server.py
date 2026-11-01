@@ -38,7 +38,7 @@ import sys
 import tempfile
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -305,6 +305,36 @@ def read_data() -> dict:
     if "quotes" not in data or not isinstance(data.get("quotes"), list):
         data["quotes"] = []
     return data
+
+
+def compose_defaults(data: dict) -> dict:
+    value = data.get("compose_defaults")
+    if isinstance(value, dict) and all(isinstance(value.get(key), str)
+                                       for key in ("source", "use_case", "updated_at")):
+        try:
+            stamp = datetime.fromisoformat(value["updated_at"].replace("Z", "+00:00"))
+            if stamp.utcoffset() is not None:
+                return {key: value[key] for key in ("source", "use_case", "updated_at")}
+        except ValueError:
+            pass
+    def recency(quote):
+        try:
+            stamp = datetime.fromisoformat(str(quote.get("updated_at") or quote.get("created_at") or "").replace("Z", "+00:00"))
+            if stamp.utcoffset() is not None:
+                return stamp
+        except ValueError:
+            pass
+        return datetime.min.replace(tzinfo=timezone.utc)
+    quotes = data.get("quotes") or []
+    latest = max(quotes, key=lambda quote: (recency(quote), str(quote.get("id") or ""))) if quotes else {}
+    return {"source": latest.get("source") if isinstance(latest.get("source"), str) else "",
+            "use_case": latest.get("use_case") if isinstance(latest.get("use_case"), str) else "",
+            "updated_at": latest.get("updated_at") or latest.get("created_at") or ""}
+
+
+def saved_compose_defaults(source: str, use_case: str) -> dict:
+    return {"source": source, "use_case": use_case,
+            "updated_at": datetime.now(timezone.utc).isoformat(timespec="microseconds")}
 
 
 def backup_data_file():
@@ -626,6 +656,7 @@ def add_quote(text: str, source: str = "", use_case: str = "", *, attachments=No
             if previous is not None:
                 return previous, True
         data["quotes"].append(quote)
+        data["compose_defaults"] = saved_compose_defaults(source, use_case)
         _atomic_write(data)
     schedule_sync()
     return quote, False
@@ -706,6 +737,7 @@ def edit_quote(qid: str, text: str, source: str = "", use_case: str = "",
         target["source"] = source
         target["use_case"] = use_case
         target["updated_at"] = now_iso()
+        data["compose_defaults"] = saved_compose_defaults(source, use_case)
         _atomic_write(data)
     schedule_sync()
     return target
@@ -819,6 +851,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True, "query": q, "count": len(quotes),
                 "offset": offset, "limit": limit, "total": total,
                 "quotes": quotes,
+                "compose_defaults": compose_defaults(read_data()),
             }, ensure_ascii=False))
             return
 

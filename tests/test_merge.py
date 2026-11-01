@@ -48,6 +48,12 @@ def by_id(d):
 
 class MergeDriverTest(TimeLimitedTest):
 
+    def test_compose_defaults_merge_latest_in_both_directions_including_clear(self):
+        old = {'quotes': [], 'compose_defaults': {'source': 'Older', 'use_case': 'Old use', 'updated_at': '2026-01-01T00:00:00.000001+00:00'}}
+        new = {'quotes': [], 'compose_defaults': {'source': '', 'use_case': '', 'updated_at': '2026-01-01T00:00:00.000002+00:00'}}
+        for a, b in ((old, new), (new, old), ({'quotes': []}, new)):
+            self.assertEqual(self.merge(None, a, b)['compose_defaults'], new['compose_defaults'])
+
     def run_driver(self, base, ours, theirs):
         """base/ours/theirs：dict（写成 JSON）、str（原样写入）或 None（空文件，git 无共同祖先时就是这样）。
         返回 (退出码, 合并后 %A 的原文)。"""

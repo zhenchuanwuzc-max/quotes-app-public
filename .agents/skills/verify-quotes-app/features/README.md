@@ -9,6 +9,7 @@
 | 浏览与搜索 | 目录、海报、搜索框 | [browse-search.md](browse-search.md) |
 | 新增与删除 | 目录新增、海报删除 | [create-delete.md](create-delete.md) |
 | 编辑与置顶 | 目录行和海报 | [edit-pin.md](edit-pin.md) |
+| 记住出处与用途 | 新增面板 | [compose-defaults.md](compose-defaults.md) |
 | 标题与正文层级 | 编辑器标题工具、金句展示 | [headings.md](headings.md) |
 | 图片与视频来源 | 新增或编辑、缩略图、海报 | [images.md](images.md) |
 | 多设备同步 | 同步按钮及后台同步 | [sync.md](sync.md) |

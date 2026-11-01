@@ -34,6 +34,7 @@ import os
 import sys
 import json
 import re
+from datetime import datetime
 
 _MARK = re.compile(r'^(<<<<<<<|=======|>>>>>>>|\|\|\|\|\|\|\|)')
 _LOG = os.environ.get("QUOTES_MERGE_LOG") or "/tmp/quotes-merge.log"  # env 仅供测试隔离
@@ -76,6 +77,21 @@ def load(path):
 
 def quote_map(d):
     return {q.get("id"): q for q in (d.get("quotes") or []) if q.get("id")}
+
+
+def compose_defaults_candidate(data):
+    value = data.get("compose_defaults")
+    if not isinstance(value, dict) or not all(isinstance(value.get(key), str)
+                                             for key in ("source", "use_case", "updated_at")):
+        return None
+    try:
+        stamp = datetime.fromisoformat(value["updated_at"].replace("Z", "+00:00"))
+        if stamp.utcoffset() is None:
+            return None
+    except ValueError:
+        return None
+    record = {key: value[key] for key in ("source", "use_case", "updated_at")}
+    return stamp, record["source"], record["use_case"], record["updated_at"], record
 
 
 def _content_recency(q):
@@ -143,6 +159,12 @@ def union(ours, theirs, base):
                              str(theirs.get("updated", "")))
                          or theirs.get("updated"))
     result["quotes"] = merged
+    defaults = [candidate for candidate in
+                (compose_defaults_candidate(ours), compose_defaults_candidate(theirs)) if candidate is not None]
+    if defaults:
+        result["compose_defaults"] = max(defaults, key=lambda candidate: candidate[:4])[4]
+    else:
+        result.pop("compose_defaults", None)
     return result
 
 
