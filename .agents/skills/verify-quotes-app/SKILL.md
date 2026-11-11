@@ -35,6 +35,8 @@ For heading and paragraph changes, use [features/headings.md](features/headings.
 /usr/bin/python3 .agents/skills/verify-quotes-app/scripts/prove-headings.py --evidence "$HOME/Library/Caches/quotes-pstack/headings-$(date +%Y%m%d-%H%M%S)-$$"
 ```
 
+For update checks and release metadata, use [features/updates.md](features/updates.md). The generic browser proof blocks these routes. Keep mocked UI state, real public metadata/download verification, and actual native installation as separate results.
+
 ## Cleanup
 
 The helper stops only its own server and removes its temporary directory in `finally`. It retains the supplied evidence directory. Check the printed cleanup line and confirm the evidence files exist. On a failed run inspect the exception and retained evidence, and use a fresh evidence path for the next attempt. Do not run `scripts/release.sh` without an actual release task.
