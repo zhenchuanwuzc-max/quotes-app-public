@@ -4,6 +4,7 @@ import json
 import sys
 import unittest
 import urllib.error
+from urllib.parse import urlsplit
 from pathlib import Path
 from unittest.mock import patch
 
@@ -31,7 +32,7 @@ class ReleaseCheckTest(unittest.TestCase):
             url = req.full_url
             if url.startswith("https://api.github.com/"):
                 raise urllib.error.HTTPError(url, 403, "rate limit exceeded", {}, None)
-            if url == base + "/releases/latest":
+            if urlsplit(url)._replace(query="").geturl() == base + "/releases/latest":
                 return Response(b"", tag)
             if url == base + "/releases/expanded_assets/v0.5.0":
                 return Response(('<a href="' + download + '">quotes.app.zip</a>').encode())
@@ -45,6 +46,21 @@ class ReleaseCheckTest(unittest.TestCase):
         self.assertEqual(release["tag_name"], "v0.5.0")
         self.assertEqual(release["html_url"], tag)
         self.assertEqual(release["assets"][0]["browser_download_url"], download)
+
+    def test_shared_proxy_cache_cannot_hide_a_new_release(self):
+        base = "https://github.com/" + server.GITHUB_CODE_REPO
+
+        def network(req, timeout):
+            url = req.full_url
+            if url.startswith("https://api.github.com/"):
+                raise urllib.error.HTTPError(url, 403, "rate limit exceeded", {}, None)
+            if urlsplit(url).path.endswith("/latest"):
+                tag = "v0.5.1" if urlsplit(url).query else "v0.4.1"
+                return Response(b"", base + "/releases/tag/" + tag)
+            return Response(b"")
+
+        with patch.object(server, "read_gh_token", return_value=""), patch("urllib.request.urlopen", network):
+            self.assertEqual(server.fetch_latest_release()["tag_name"], "v0.5.1")
 
     def test_no_release_is_an_error_not_a_current_version(self):
         error = urllib.error.HTTPError("https://api.github.com", 404, "Not Found", {}, None)

@@ -38,6 +38,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -183,7 +184,8 @@ def fetch_latest_release() -> dict:
     import urllib.error
     import urllib.request
     token = read_gh_token()
-    url = f"https://api.github.com/repos/{GITHUB_CODE_REPO}/releases/latest"
+    check_id = time.time_ns()
+    url = f"https://api.github.com/repos/{GITHUB_CODE_REPO}/releases/latest?check={check_id}"
     req = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github+json", "User-Agent": "quotes-app"})
     if token:
@@ -199,7 +201,8 @@ def fetch_latest_release() -> dict:
 
     # Public release pages do not share the API's anonymous request quota.
     base = f"https://github.com/{GITHUB_CODE_REPO}"
-    public_req = urllib.request.Request(base + "/releases/latest", headers={"User-Agent": "quotes-app"})
+    public_req = urllib.request.Request(base + f"/releases/latest?check={check_id}",
+                                        headers={"User-Agent": "quotes-app", "Cache-Control": "no-cache"})
     with urllib.request.urlopen(public_req, timeout=8) as resp:
         release_url = resp.geturl()
     prefix = base + "/releases/tag/"
