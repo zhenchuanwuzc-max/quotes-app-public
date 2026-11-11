@@ -20,6 +20,7 @@ Most note/quote tools are either too heavy (a database, an account, a cloud serv
 - Add quotes from the browser, or via a small HTTP API.
 - Multi-device sync over your own **private** Git repo.
 - Optional menu-bar packaging on macOS (via `py2app`).
+- Check public GitHub releases without a token; API throttling falls back to the public release page and direct asset downloads.
 
 ## Architecture
 
@@ -86,6 +87,7 @@ Tests (`/usr/bin/python3 -m unittest discover -s tests -v`, about 13 s):
 | `tests/test_mutations.py` | edit / pin / delete: effect, persisted, 404, backup written, 409 on stale edit |
 | `tests/test_merge.py` | the git merge driver: concurrent add/edit/pin/delete from two machines, duplicate ids, malformed input refused; plus a real two-clone + bare-remote git run |
 | `tests/test_browser.py` | headless Chromium clicks through the page: list, poster, back, search, add, delete (needs Python `playwright`; `QUOTES_SKIP_BROWSER=1` to skip) |
+| `tests/test_updates.py` | public release discovery during API throttling, missing releases, and credential-free public asset downloads |
 
 Every server test runs a throwaway `server.py` on a random free port with temp data / backup / HOME dirs and no `sync.sh`, so tests never touch your real data repo, never run git sync, never hit the live port, and seed only from `quotes.example.json`.
 

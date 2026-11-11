@@ -2223,14 +2223,14 @@ function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; 
 function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
 function checkUpdate(verbose){
-  if(verbose) status('检查更新中……',8000);
+  if(verbose) status('检查更新中……',0,true);
   return api('/check-update').then(function(d){
     if(d.error){
-      if(verbose) status('检查失败：'+String(d.error).slice(0,60)+(d.has_token?'':'（未配 .gh-token）'),4000);
+      if(verbose) status('检查失败：'+String(d.error).slice(0,100)+'，请稍后重试',6000,false);
       return;
     }
     var me=d.current, latest=d.latest;
-    if(!latest){ if(verbose) status('远端 release 不存在',3000); return; }
+    if(!latest){ if(verbose) status('暂未找到已发布的版本',3000,false); return; }
     if(cmpVer(latest,me)>0){
       if(verbose) lsDel('dismissedVer');
       if(lsGet('dismissedVer')!==latest){
@@ -2239,9 +2239,9 @@ function checkUpdate(verbose){
         ubar.setAttribute('data-ver', latest);
         ubar.classList.add('show');
       }
-      if(verbose) status('发现新版本 v'+latest,3000);
-    }else if(verbose) status('已是最新 v'+me,2600);
-  }).catch(function(){ if(verbose) status('检查失败：server 无响应',3000); });
+      if(verbose) status('发现新版本 v'+latest,3000,false);
+    }else if(verbose) status('已是最新 v'+me,2600,false);
+  }).catch(function(){ if(verbose) status('检查失败：本地服务无响应，请重新打开 App',4000,false); });
 }
 window.checkUpdate=checkUpdate;
 var upTicks=0;

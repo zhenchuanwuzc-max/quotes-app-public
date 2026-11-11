@@ -29,7 +29,7 @@ def _collect_vendor(base="vendor"):
     return out
 
 
-DATA_FILES = ["index.html", "server.py", "VERSION"] + _collect_vendor()
+DATA_FILES = ["index.html", "server.py", "shortcut_settings.py", "VERSION"] + _collect_vendor()
 
 OPTIONS = {
     "argv_emulation": False,
@@ -47,6 +47,7 @@ OPTIONS = {
     "packages": ["webview"],
     "includes": [
         "server",
+        "shortcut_settings",
         "json",
         "sqlite3",
         "http.server",

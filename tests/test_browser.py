@@ -108,6 +108,15 @@ class BrowserUsageTest(ServerTest):
                                     arg=len(EX))
 
     # ---- tests ----
+    def test_update_check_does_not_require_a_token_for_public_releases(self):
+        self.page.route("**/check-update", lambda route: route.fulfill(
+            json={"current": "0.4.1", "latest": "0.5.0", "has_token": False,
+                  "html_url": "https://github.com/example/releases/tag/v0.5.0"}))
+        self.open_app()
+        self.page.evaluate("checkUpdate(true)")
+        self.assertTrue(self.page.locator("#ubar").is_visible())
+        self.assertEqual(self.page.locator("#ubarVer").text_content(), "v0.5.0")
+
     def test_directory_actions_are_above_quotes_and_categories_are_to_the_left(self):
         self.open_app()
         for width in (1180, 720, 375):

@@ -179,6 +179,8 @@ def read_gh_token() -> str:
 
 
 def fetch_latest_release() -> dict:
+    import html
+    import urllib.error
     import urllib.request
     token = read_gh_token()
     url = f"https://api.github.com/repos/{GITHUB_CODE_REPO}/releases/latest"
@@ -186,8 +188,37 @@ def fetch_latest_release() -> dict:
         "Accept": "application/vnd.github+json", "User-Agent": "quotes-app"})
     if token:
         req.add_header("Authorization", f"Bearer {token}")
-    with urllib.request.urlopen(req, timeout=8) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code not in (401, 403, 429):
+            raise
+    except urllib.error.URLError:
+        pass
+
+    # Public release pages do not share the API's anonymous request quota.
+    base = f"https://github.com/{GITHUB_CODE_REPO}"
+    public_req = urllib.request.Request(base + "/releases/latest", headers={"User-Agent": "quotes-app"})
+    with urllib.request.urlopen(public_req, timeout=8) as resp:
+        release_url = resp.geturl()
+    prefix = base + "/releases/tag/"
+    tag = release_url[len(prefix):] if release_url.startswith(prefix) else ""
+    if not re.fullmatch(r"v?\d+\.\d+\.\d+", tag):
+        raise RuntimeError("无法识别最新发布版本，请稍后重试")
+    assets_req = urllib.request.Request(base + "/releases/expanded_assets/" + tag,
+                                        headers={"User-Agent": "quotes-app"})
+    with urllib.request.urlopen(assets_req, timeout=8) as resp:
+        page = resp.read().decode("utf-8")
+    assets = []
+    path_prefix = f"/{GITHUB_CODE_REPO}/releases/download/{tag}/"
+    for href in re.findall(r'href="([^"]+)"', page):
+        href = html.unescape(href)
+        path = href[len("https://github.com"):] if href.startswith("https://github.com/") else href
+        if path == path_prefix + "quotes.app.zip":
+            url = "https://github.com" + path
+            assets.append({"name": "quotes.app.zip", "url": url, "browser_download_url": url})
+    return {"tag_name": tag, "html_url": release_url, "assets": assets}
 
 
 _progress_lock = threading.Lock()
@@ -209,7 +240,7 @@ def download_asset(asset_api_url: str, dest_path: str) -> None:
     token = read_gh_token()
     req = urllib.request.Request(asset_api_url, headers={
         "Accept": "application/octet-stream", "User-Agent": "quotes-app"})
-    if token:
+    if token and urlparse(asset_api_url).hostname == "api.github.com":
         req.add_header("Authorization", f"Bearer {token}")
     with urllib.request.urlopen(req, timeout=180) as resp:
         total = int(resp.headers.get("Content-Length", 0))
@@ -247,7 +278,7 @@ def _do_install_update(rel: dict, asset: dict) -> None:
         shutil.rmtree(update_dir)
     os.makedirs(update_dir, exist_ok=True)
     zip_path = os.path.join(update_dir, asset["name"])
-    download_asset(asset["url"], zip_path)
+    download_asset(asset.get("browser_download_url") or asset["url"], zip_path)
     _set_progress(status="installing")
 
     log_path = "/tmp/quotes-updater.log"
