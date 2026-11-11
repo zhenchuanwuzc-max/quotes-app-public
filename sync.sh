@@ -60,7 +60,7 @@ chmod 600 "$LOG" 2>/dev/null || true   # R7：日志可能含凭据痕迹，不�
 
 # STATUS 必须留在 /tmp —— server.py 的 /sync-now 端点硬编码读这个路径（搜 quotes-sync.status），
 # 且它是「最近一次结果」的瞬时状态，重启清掉语义正确。别去"统一"它，会打断 App 里的同步按钮。
-STATUS="/tmp/quotes-sync.status"
+STATUS="${QUOTES_SYNC_STATUS:-/tmp/quotes-sync.status}"  # env 仅供隔离测试
 
 LOCK="$PWD/.synclock"
 HOLD_LOCK=0
@@ -184,6 +184,14 @@ commit_local() {
     for f in quotes.json json-merge.py sync.sh .gitattributes; do
         [ -e "$f" ] && { gitq git add "$f" || true; }
     done
+    # 只提交完成的内容寻址图片；并发上传中的 .upload-* 不能进入版本历史。
+    local image images=()
+    for image in attachments/*; do
+        if [ -f "$image" ] && [ ! -L "$image" ] && [[ "${image##*/}" =~ ^[a-f0-9]{64}\.(png|jpg|webp)$ ]]; then
+            images+=("$image")
+        fi
+    done
+    if [ "${#images[@]}" -gt 0 ]; then gitq git add -- "${images[@]}" || return 1; fi
     if gitq git commit -m "sync: $(date '+%Y-%m-%d %H:%M:%S') @ $(hostname -s)"; then
         log "本地已提交"
     else

@@ -48,6 +48,12 @@ def by_id(d):
 
 class MergeDriverTest(TimeLimitedTest):
 
+    def test_compose_defaults_merge_latest_in_both_directions_including_clear(self):
+        old = {'quotes': [], 'compose_defaults': {'source': 'Older', 'use_case': 'Old use', 'updated_at': '2026-01-01T00:00:00.000001+00:00'}}
+        new = {'quotes': [], 'compose_defaults': {'source': '', 'use_case': '', 'updated_at': '2026-01-01T00:00:00.000002+00:00'}}
+        for a, b in ((old, new), (new, old), ({'quotes': []}, new)):
+            self.assertEqual(self.merge(None, a, b)['compose_defaults'], new['compose_defaults'])
+
     def run_driver(self, base, ours, theirs):
         """base/ours/theirs：dict（写成 JSON）、str（原样写入）或 None（空文件，git 无共同祖先时就是这样）。
         返回 (退出码, 合并后 %A 的原文)。"""
@@ -145,6 +151,29 @@ class MergeDriverTest(TimeLimitedTest):
         self.assertEqual(got["text"], "edited")
         self.assertTrue(got["pinned"])
         self.assertEqual(got["pinned_at"], ts(6))
+
+    def test_attachment_only_concurrent_edits_converge_with_content_group(self):
+        base_quote = quote("s1", "same text")
+        a = dict(base_quote, attachments=[{"path": "attachments/" + "a" * 64 + ".png", "mime": "image/png", "alt": "A"}],
+                 source_url="https://www.youtube.com/watch?v=a", capture_id="capture-1")
+        b = dict(base_quote, attachments=[{"path": "attachments/" + "b" * 64 + ".jpg", "mime": "image/jpeg", "alt": "B"}],
+                 source_url="https://www.youtube.com/watch?v=b", capture_id="capture-1")
+        merged = self.merge_both_ways(doc(base_quote), doc(a), doc(b))
+        got = by_id(merged)["s1"]
+        self.assertIn(got, [a, b], "attachments and source URL must stay with the same content edit")
+        self.assertEqual(got["capture_id"], "capture-1")
+
+    def test_newer_image_edit_and_independent_pin_both_survive(self):
+        base_quote = quote("s1", "old")
+        edited = dict(quote("s1", "with image", updated=ts(5)),
+                      attachments=[{"path": "attachments/" + "c" * 64 + ".png", "mime": "image/png", "alt": "new"}],
+                      source_url="https://www.bilibili.com/video/BVexample", capture_id="capture-2")
+        pinned = dict(base_quote, pinned=True, pinned_at=ts(6))
+        got = by_id(self.merge_both_ways(doc(base_quote), doc(edited), doc(pinned)))["s1"]
+        self.assertEqual(got["attachments"], edited["attachments"])
+        self.assertEqual(got["source_url"], edited["source_url"])
+        self.assertEqual(got["text"], "with image")
+        self.assertTrue(got["pinned"])
 
     # ---- 置顶 ----
     def test_later_unpin_beats_earlier_pin(self):

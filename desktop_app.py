@@ -107,11 +107,19 @@ def setup_app_menu() -> None:
 def main() -> None:
     start_server_thread()
     import webview
+    from AppKit import NSScreen
+
+    width, height = 1180, 840
+    screen = NSScreen.mainScreen()
+    if screen is not None:
+        visible = screen.visibleFrame().size
+        width = min(width, int(visible.width) - 32)
+        height = min(height, int(visible.height) - 32)
     window = webview.create_window(
         "quotes · 金句库",
         URL,
-        width=720,
-        height=820,
+        width=width,
+        height=height,
         resizable=True,
         min_size=(480, 540),
     )
