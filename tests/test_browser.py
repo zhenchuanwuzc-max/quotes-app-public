@@ -108,15 +108,19 @@ class BrowserUsageTest(ServerTest):
                                     arg=len(EX))
 
     # ---- tests ----
-    def test_directory_controls_stay_to_the_left_of_the_quotes(self):
+    def test_directory_actions_are_above_quotes_and_categories_are_to_the_left(self):
         self.open_app()
         for width in (1180, 720, 375):
             self.page.set_viewport_size({"width": width, "height": 700})
             with self.subTest(width=width):
                 row = self.rows().first.bounding_box()
-                for selector in ("#q", "#btnSync", "#btnNew", "#btnHelpA", "#rail .rbtn"):
-                    control = self.page.locator(selector).first.bounding_box()
-                    self.assertLessEqual(control["x"] + control["width"], row["x"], selector)
+                category = self.page.locator("#rail .rbtn").first.bounding_box()
+                self.assertLessEqual(category["x"] + category["width"], row["x"])
+                for selector in ("#q", "#btnSync", "#btnNew", "#btnHelpA"):
+                    control = self.page.locator(selector).bounding_box()
+                    self.assertGreaterEqual(control["x"], row["x"], selector)
+                    self.assertLessEqual(control["x"] + control["width"], row["x"] + row["width"], selector)
+                    self.assertLessEqual(control["y"] + control["height"], row["y"], selector)
                 self.assertGreaterEqual(row["width"], width * 0.60)
                 self.assertLessEqual(row["x"] + row["width"], width)
 
