@@ -47,7 +47,8 @@ class BrowserUsageTest(ServerTest):
                 "确实要跳过：QUOTES_SKIP_BROWSER=1" % _IMPORT_ERROR)
         cls._pw = sync_playwright().start()
         try:
-            cls.browser = cls._pw.chromium.launch()
+            engine = os.environ.get("QUOTES_TEST_BROWSER", "chromium")
+            cls.browser = getattr(cls._pw, engine).launch()
         except Exception:
             cls._pw.stop()
             raise
@@ -107,6 +108,25 @@ class BrowserUsageTest(ServerTest):
                                     arg=len(EX))
 
     # ---- tests ----
+    def test_directory_controls_stay_to_the_left_of_the_quotes(self):
+        self.open_app()
+        for width in (1180, 720, 375):
+            self.page.set_viewport_size({"width": width, "height": 700})
+            with self.subTest(width=width):
+                row = self.rows().first.bounding_box()
+                for selector in ("#q", "#btnSync", "#btnNew", "#btnHelpA", "#rail .rbtn"):
+                    control = self.page.locator(selector).first.bounding_box()
+                    self.assertLessEqual(control["x"] + control["width"], row["x"], selector)
+                self.assertGreaterEqual(row["width"], width * 0.60)
+                self.assertLessEqual(row["x"] + row["width"], width)
+
+        self.page.locator('#rail [data-key="__pin__"]').click()
+        self.assertEqual(self.rows().count(), sum(bool(quote.get("pinned")) for quote in EX))
+        self.page.locator('#rail [data-key="__all__"]').click()
+        self.assertEqual(self.rows().count(), len(EX))
+        self.page.locator("#q").fill("Drucker")
+        self.assertEqual(self.rows().count(), 1)
+
     def test_browse_poster_back_and_search(self):
         with self.step("打开目录"):
             self.open_app()
@@ -755,6 +775,57 @@ class BrowserUsageTest(ServerTest):
         self.page.locator('#cSave').click()
         self.page.locator('#compose').wait_for(state='hidden')
         self.assertIn('第一项内容追加前追加后', self.find(quote['id'])['text'])
+
+    def test_new_list_item_caret_stays_on_the_text_line(self):
+        self.open_app()
+        self.page.locator("#btnNew").click()
+        editor = self.page.locator("#cedit .vditor-ir .vditor-reset")
+        editor.wait_for(state="visible")
+        self.page.add_style_tag(content="#cedit .vditor-reset {caret-color: #ff00ff}")
+
+        def caret_top(item):
+            for _ in range(5):
+                image = base64.b64encode(item.screenshot(caret="initial")).decode("ascii")
+                top = self.page.evaluate("""async png => {
+                    const image = new Image();
+                    image.src = 'data:image/png;base64,' + png;
+                    await image.decode();
+                    const canvas = document.createElement('canvas');
+                    canvas.width = image.width;
+                    canvas.height = image.height;
+                    const context = canvas.getContext('2d');
+                    context.drawImage(image, 0, 0);
+                    const pixels = context.getImageData(0, 0, image.width, image.height).data;
+                    for (let i = 0; i < pixels.length; i += 4) {
+                        if (pixels[i] > 200 && pixels[i + 1] < 80 && pixels[i + 2] > 200) {
+                            return Math.floor(i / 4 / image.width);
+                        }
+                    }
+                    return -1;
+                }""", image)
+                if top >= 0:
+                    return top
+            self.fail("截图中没有可见的光标")
+
+        self.page.keyboard.type("1. ")
+        self.page.keyboard.insert_text("第一项列表文字。")
+        editor.locator("ol > li").first.wait_for()
+        self.page.keyboard.press("Enter")
+        second = editor.locator("ol > li").nth(1)
+        blank_top = caret_top(second)
+        self.page.keyboard.insert_text("第二项")
+        self.assertEqual(second.inner_text(), "第二项")
+        typed_top = caret_top(second)
+        self.assertAlmostEqual(blank_top, typed_top, delta=2)
+        self.page.keyboard.press("Enter")
+        self.page.keyboard.press("Enter")
+        self.page.keyboard.insert_text("退出列表后的正文")
+        self.assertEqual(editor.locator("ol > li").count(), 2)
+        self.assertEqual(editor.locator("p").last.inner_text(), "退出列表后的正文")
+        self.page.locator("#cSave").click()
+        self.page.locator("#compose").wait_for(state="hidden")
+        saved = next(quote for quote in self.list_all() if "第一项列表文字" in quote["text"])
+        self.assertRegex(saved["text"], r"1\. 第一项列表文字。\n2\. 第二项\n+退出列表后的正文")
 
     def test_long_body_stays_readable_after_window_resize(self):
         text = '\n\n'.join('第%d段正文需要可以滚动阅读。' % i for i in range(1, 81))

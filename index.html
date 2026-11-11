@@ -57,7 +57,6 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:0}
 
 /* ---------- shared bar ---------- */
 .bar{display:flex;align-items:center;padding:0 var(--gut);gap:clamp(8px,1.4vw,18px);min-width:0;position:relative;z-index:2}
-.ihead.bar.top{border-bottom:1px solid var(--hair)}
 .spacer{flex:1 1 auto;min-width:0}
 .wordmark{display:flex;align-items:baseline;flex:none}
 .wordmark b{font-size:clamp(13px,1.25vw,16px);font-weight:700;letter-spacing:0}
@@ -87,18 +86,26 @@ html[data-theme="red"] .chip-filter{color:var(--fg)}
 .hbtn:hover{color:var(--fg);border-color:var(--fg)}
 
 /* ================= INDEX ================= */
-#index{position:fixed;inset:0;z-index:3;display:flex;flex-direction:column}
-.ihead{height:var(--bar);flex:none;background:var(--bg)}
-.sbox{display:flex;align-items:center;gap:.7em;flex:0 1 auto;min-width:0;border-bottom:1px solid var(--hair);padding-bottom:4px;transition:border-color .15s ease}
+#index{position:fixed;inset:0;z-index:3;display:grid;grid-template-columns:clamp(116px,20vw,224px) minmax(0,1fr)}
+.isidebar{
+  display:flex;flex-direction:column;min-height:0;
+  border-right:1px solid var(--hair);background:#ECE9E2;
+}
+.ihead{flex:none;display:grid;gap:16px;padding:20px clamp(10px,1.6vw,22px) 16px}
+.ihead .wordmark b{font-size:16px}
+.iactions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.iactions .tag{padding:0 4px}
+#btnNew{grid-column:1 / -1;background:var(--ink);border-color:var(--ink);color:var(--paper)}
+#btnNew:hover:not(:disabled){background:#333;border-color:#333}
+.sbox{min-width:0;border-bottom:1px solid var(--hair);transition:border-color .15s ease}
 .sbox:focus-within{border-bottom-color:var(--fg)}
-.sbox input{width:clamp(120px,24vw,340px);min-width:0;font-size:clamp(13px,1.2vw,16px);letter-spacing:0;-webkit-appearance:none;appearance:none}
+.sbox input{width:100%;min-width:0;height:28px;padding:0;font-size:13px;-webkit-appearance:none;appearance:none}
 .sbox input:focus,.sbox input:focus-visible{outline:none}
 .sbox input::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
 .sbox input::placeholder{color:var(--mute)}
 
-#iscroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;position:relative;z-index:1}
-.isheet{display:grid;grid-template-columns:repeat(12,1fr);padding:clamp(16px,2.6vh,30px) var(--gut) 18vh}
-.rail{grid-column:1 / span 2;position:sticky;top:0;align-self:start;padding-right:clamp(10px,1.8vw,30px);min-width:0}
+#iscroll{min-height:0;overflow-y:auto;overflow-x:hidden;padding:20px clamp(9px,2.25vw,32px) 18vh}
+.rail{min-height:0;overflow:auto;padding:4px clamp(10px,1.6vw,22px) 18px}
 .rlab{font-size:10px;letter-spacing:0;color:var(--mute);margin:0 0 8px}
 .rsep{height:1px;background:var(--rule);margin:12px 0}
 .rbtn{
@@ -115,10 +122,10 @@ html[data-theme="red"] .chip-filter{color:var(--fg)}
 .rbtn .lb{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .rbtn.zero{opacity:.32}
 
-.list{grid-column:3 / span 10;align-self:start;position:relative;border-top:1px solid var(--rule);min-width:0}
+.list{position:relative;border-top:1px solid var(--rule);min-width:0}
 .row{
   position:relative;display:grid;
-  grid-template-columns:8% minmax(0,1fr) clamp(190px,27%,330px);
+  grid-template-columns:clamp(54px,7%,86px) minmax(0,1fr) clamp(190px,27%,330px);
   align-items:baseline;background:var(--bg);
   padding:clamp(13px,1.7vh,19px) 0;border-bottom:1px solid var(--rule);
   cursor:pointer;transition:background-color .12s ease;
@@ -353,8 +360,10 @@ mark{background:none;color:var(--ink);font-weight:700}
 #cbox .vditor-hint button[aria-checked="true"]{background:var(--rule);color:var(--ink)}
 #cbox .vditor-toolbar__divider{border-left:1px solid var(--rule)}
 #cbox .vditor-content{flex:1 1 auto;min-height:0;border-radius:0!important}
-#cbox .vditor-reset{font-family:var(--font)!important;font-size:16px!important;line-height:1.72!important;color:var(--ink)!important;word-break:break-word}
+#cbox .vditor-reset{--editor-leading:1.72;font-family:var(--font)!important;font-size:16px!important;line-height:var(--editor-leading)!important;color:var(--ink)!important;word-break:break-word}
 #cbox .vditor-ir pre.vditor-reset{padding:14px clamp(14px,2vw,24px)!important;background:transparent!important}
+/* WebKit 把空列表项的光标画在线盒顶部；用等量内边距保留原来的行高。 */
+#cbox .vditor-ir li:empty{line-height:normal;padding-block:calc((var(--editor-leading) * 1em - 1lh) / 2)}
 #cbox .vditor-reset blockquote{border-left:2px solid var(--hair)!important;color:rgba(18,18,18,.55)!important}
 #cbox .vditor-reset h1,#cbox .vditor-reset h2,#cbox .vditor-reset h3,
 #cbox .vditor-reset h4,#cbox .vditor-reset h5,#cbox .vditor-reset h6{border-bottom:0!important;font-weight:700}
@@ -453,18 +462,19 @@ mark{background:none;color:var(--ink);font-weight:700}
   font-size:13px;letter-spacing:0;color:var(--mute);
 }
 
-@media (max-width:900px){
-  .isheet{grid-template-columns:repeat(6,1fr)}
-  .rail{grid-column:1 / span 6;position:static;padding:0 0 14px;display:flex;flex-wrap:wrap;gap:0 14px;border-bottom:1px solid var(--rule);margin-bottom:14px}
-  .rlab,.rsep{display:none}
-  .rbtn{width:auto;padding:5px 0 5px 10px}
-  .list{grid-column:1 / span 6}
-  .row{grid-template-columns:clamp(52px,15vw,86px) minmax(0,1fr)}
-
+@media (max-width:980px){
+  .row{grid-template-columns:clamp(44px,8vw,76px) minmax(0,1fr)}
   .rmeta{grid-column:2;padding:8px 0 0 clamp(14px,1.6vw,26px)}
 }
 @media (max-width:720px){
   #stage{grid-template-columns:clamp(84px,22vw,120px) 1fr}
+}
+@media (max-width:540px){
+  .ihead{gap:10px;padding-top:14px}
+  .rbtn{padding-left:7px;gap:4px}
+  .row .rn{padding-inline:5px}
+  .row .rq,.row .rmeta{padding-left:4px}
+  .row-media{width:36px;height:36px}
 }
 @media (prefers-reduced-motion:reduce){
   *{transition-duration:.001s!important;animation-duration:.001s!important}
@@ -475,22 +485,23 @@ mark{background:none;color:var(--ink);font-weight:700}
 
 <!-- ============ 目录 ============ -->
 <section id="index">
-  <header class="bar top ihead">
-    <div class="wordmark"><b>金句库</b></div>
-    <div class="sbox">
-      <input id="q" type="search" placeholder="搜索" autocomplete="off" spellcheck="false" aria-label="搜索">
-    </div>
-    <div class="spacer"></div>
-    <button class="tag" id="btnSync">同步</button>
-    <button class="tag" id="btnNew" disabled>新增</button>
-    <button class="tag" id="btnHelpA" type="button" aria-label="快捷键">快捷键</button>
-  </header>
-  <div id="iscroll">
-    <div class="isheet">
-      <aside class="rail" id="rail"></aside>
-      <div class="list" id="list"></div>
-    </div>
-  </div>
+  <aside class="isidebar" aria-label="金句库菜单">
+    <header class="ihead">
+      <div class="wordmark"><b>金句库</b></div>
+      <div class="sbox">
+        <input id="q" type="search" placeholder="搜索" autocomplete="off" spellcheck="false" aria-label="搜索">
+      </div>
+      <div class="iactions">
+        <button class="tag" id="btnNew" disabled>新增</button>
+        <button class="tag" id="btnSync">同步</button>
+        <button class="tag" id="btnHelpA" type="button" aria-label="快捷键">快捷键</button>
+      </div>
+    </header>
+    <nav class="rail" id="rail" aria-label="金句分类"></nav>
+  </aside>
+  <main id="iscroll" aria-label="金句列表">
+    <div class="list" id="list"></div>
+  </main>
 </section>
 
 <!-- ============ 海报 ============ -->
@@ -670,7 +681,7 @@ var state = { view:'index', filter:null, q:'', L:[], idx:0, id:null, cur:0, scro
 var $ = function(id){ return document.getElementById(id); };
 var root=document.documentElement,
     indexEl=$('index'), iscroll=$('iscroll'), railEl=$('rail'), listEl=$('list'),
-    qInput=$('q'), sboxEl=document.querySelector('.sbox'),
+    qInput=$('q'),
     app=$('app'), stage=$('stage'), qtBox=$('quote'), qt=$('qt'),
     pnoEl=$('pno'), ucEl=$('uc'), srcEl=$('src'), dateEl=$('date'), chip=$('chipFilter'),
     composeEl=$('compose'), cbox=$('cbox'), cSrc=$('cSrc'), cUse=$('cUse'), cUrl=$('cUrl'), cTitle=$('cTitle'),
@@ -964,7 +975,7 @@ function renderList(){
   listEl.innerHTML='';
   if(state.load==='loading'){ renderListState('载入中……'); return; }
   if(state.load==='error'){ renderListState('载入失败——server 没响应，刷新页面重试'); return; }
-  if(!DB.length){ renderListState('库里还没有金句，右上角「新增」开始'); return; }
+  if(!DB.length){ renderListState('库里还没有金句，点击左栏「新增」开始'); return; }
   if(!L.length){
     var e=document.createElement('div'); e.className='inone'; e.textContent='无匹配';
     listEl.appendChild(e);
@@ -1041,7 +1052,6 @@ function renderList(){
     frag.appendChild(row);
   });
   listEl.appendChild(frag);
-  alignSearch();
   fitLeads();
 }
 /* 首句一行放得下 → 该条只占一行（后文灰字在行尾省略）；首句自己就折行 → 保持两行。
@@ -1055,17 +1065,6 @@ function fitLeads(){
     wraps.push(n>1);
   }
   for(i=0;i<rqs.length;i++) if(!wraps[i]) rqs[i].classList.add('one');
-}
-/* 搜索框左缘 = 金句正文列左缘 */
-function alignSearch(){
-  if(!sboxEl) return;
-  var probe=listEl.querySelector('.rq');
-  if(!probe) return;
-  sboxEl.style.marginLeft='0px';
-  var pr=probe.getBoundingClientRect();
-  var target=pr.left+(parseFloat(getComputedStyle(probe).paddingLeft)||0);
-  var d=target-sboxEl.getBoundingClientRect().left;
-  if(d>0) sboxEl.style.marginLeft=Math.round(d)+'px';
 }
 function rowEl(i){ return listEl.querySelector('.row[data-i="'+i+'"]'); }
 function setCur(i,scroll){
@@ -2372,7 +2371,7 @@ window.addEventListener('resize', function(){
   clearTimeout(rt);
   rt=setTimeout(function(){
     if(state.view==='poster') fitQuote();
-    else { alignSearch(); fitLeads(); }
+    else fitLeads();
   },90);
 });
 if(document.fonts && document.fonts.ready){
